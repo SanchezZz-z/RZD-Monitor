@@ -1,4 +1,3 @@
-import asyncio
 import json
 import re
 from collections import OrderedDict
@@ -6,7 +5,6 @@ from datetime import datetime
 
 from fuzzywuzzy import process
 import asyncpg
-from config import dbconfig
 
 
 # Функция для считывания станций и их кодов

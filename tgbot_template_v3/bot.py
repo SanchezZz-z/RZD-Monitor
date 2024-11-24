@@ -8,7 +8,6 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.storage.redis import RedisStorage, DefaultKeyBuilder
 
 from db_connection import database_connection
-from config import dbconfig
 from monitor import monitor
 from tgbot.config import load_config, Config
 from tgbot.handlers import routers_list
