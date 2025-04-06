@@ -8,7 +8,6 @@ from .monitor_menu import monitor_menu_router
 
 routers_list = [
     admin_router,
-    menu_router,
     user_router,
     train_menu_router,
     monitor_menu_router,
