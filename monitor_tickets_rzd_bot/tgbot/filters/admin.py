@@ -1,7 +1,7 @@
 from aiogram.filters import BaseFilter
 from aiogram.types import Message
 
-from tgbot.config import Config
+from monitor_tickets_rzd_bot.tgbot.config import Config
 
 
 class AdminFilter(BaseFilter):
