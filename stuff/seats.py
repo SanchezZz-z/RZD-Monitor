@@ -1,9 +1,8 @@
 import requests
 import time
 import origin_destination_date
-import rzd_app
 import rzd_web
-import seats_counter
+from monitor_tickets_rzd_bot import seats_counter, rzd_app
 
 
 def seats():

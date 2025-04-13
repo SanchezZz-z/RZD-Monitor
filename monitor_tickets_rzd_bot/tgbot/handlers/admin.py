@@ -3,8 +3,8 @@ from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
-from db_connection import database_connection
-from testing import get_user_id_by_username, add_allowed_user, remove_allowed_user
+from monitor_tickets_rzd_bot.db_connection import database_connection
+from monitor_tickets_rzd_bot.testing import get_user_id_by_username, add_allowed_user, remove_allowed_user
 from monitor_tickets_rzd_bot.tgbot.filters.admin import AdminFilter
 
 from monitor_tickets_rzd_bot.tgbot.misc.states import Train

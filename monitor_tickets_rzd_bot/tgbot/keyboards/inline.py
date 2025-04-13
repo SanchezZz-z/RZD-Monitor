@@ -1,8 +1,8 @@
 from aiogram.filters.callback_data import CallbackData
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from const import LASTOCHKA_DIRECTIONS, LASTOCHKA_TABLES, LASTOCHKA_CAR_TYPES, LASTOCHKA_SPECIAL_SEATS
+from monitor_tickets_rzd_bot.const import LASTOCHKA_DIRECTIONS, LASTOCHKA_TABLES, LASTOCHKA_CAR_TYPES, LASTOCHKA_SPECIAL_SEATS
 
 
 def right_wrong_inline_keyboard():

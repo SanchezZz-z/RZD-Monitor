@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="SqlDialectMappings">
-    <file url="file://$PROJECT_DIR$/db_funcs.sql" dialect="PostgreSQL" />
+    <file url="file://$PROJECT_DIR$/monitor_tickets_rzd_bot/db_funcs.sql" dialect="PostgreSQL" />
   </component>
 </project>

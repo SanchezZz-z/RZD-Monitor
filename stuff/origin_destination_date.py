@@ -2,7 +2,7 @@ import json
 
 # Открываем базу станций
 
-stations = open("../stations v2.0.json")
+stations = open("../monitor_tickets_rzd_bot/stations v2.0.json")
 
 # Конвертируем json в словарь
 

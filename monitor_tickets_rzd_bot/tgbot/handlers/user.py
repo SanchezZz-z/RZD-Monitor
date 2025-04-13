@@ -3,8 +3,8 @@ from aiogram.filters import CommandStart, Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
 
-from db_connection import database_connection
-from testing import save_user, check_access
+from monitor_tickets_rzd_bot.db_connection import database_connection
+from monitor_tickets_rzd_bot.testing import save_user, check_access
 # На сервере monitor_tickets_rzd_bot надо заменить на monitor_tickets_rzd_bot
 from monitor_tickets_rzd_bot.tgbot.misc.states import Train, Monitor
 
