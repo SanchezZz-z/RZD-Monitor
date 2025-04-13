@@ -2,10 +2,10 @@ import json
 import asyncio
 
 from db_connection import database_connection
-from monitor_setup import generate_user_messages
+from monitor_setup import generate_user_messages, generate_sapsan_user_messages, generate_lastochka_user_messages
 from rzd_app import get_seats
 from testing import delete_successful_monitor_task
-from tgbot_template_v3.tgbot.keyboards.inline import restore_monitor_task_inline_keyboard
+from monitor_tickets_rzd_bot.tgbot.keyboards.inline import restore_monitor_task_inline_keyboard
 
 
 async def monitor(bot):
@@ -49,7 +49,12 @@ async def monitor(bot):
 
                         if train_id in monitor_tasks_dict:
                             for completed_task in monitor_tasks_dict[train_id]:
-                                text = generate_user_messages(json.loads(completed_task["monitor_setup"]), train_data)
+                                if "first_class" in train_data: # Первый класс есть только в Сапсане
+                                    text = generate_sapsan_user_messages(json.loads(completed_task["monitor_setup"]), train_data)
+                                elif "plaz" in train_data: # Плацкарт есть только в обычных поездах
+                                    text = generate_user_messages(json.loads(completed_task["monitor_setup"]), train_data)
+                                else: # Остаются Ласточки
+                                    text = generate_lastochka_user_messages(json.loads(completed_task["monitor_setup"]), train_data)
                                 # Если места нашлись, то отправляем пользователю сообщение и удаляем таск
                                 if text:
                                     message_header = ("\U00002757\U00002757\U00002757 <b><u>НАЙДЕНЫ БИЛЕТЫ</u></b> "

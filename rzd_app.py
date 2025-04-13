@@ -9,7 +9,7 @@ import random
 import urllib3
 
 from monitor_setup import generate_user_messages
-from seats_counter import TrainSeatsCounter
+from seats_counter_new import TrainSeatsCounter, Lasto4kaSeatsCounter, SapsanSeatsCounter
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -36,7 +36,7 @@ async def get_info_with_rid(rid, hashcode, url):
         "Content-Type": "application/json",
         "Connection": "keep-alive",
         "Accept": "*/*",
-        "User-Agent": "RZD/2367 CFNetwork/1496.0.7 Darwin/23.5.0",
+        "User-Agent": "RZD/2367 CFNetwork/1568.300.101 Darwin/24.2.0",
         "Accept-Language": "ru",
         "Accept-Encoding": "gzip, deflate, br"
     }
@@ -75,7 +75,7 @@ async def get_train(origin, destination, date):
     headers = {
         "Host": "ekmp-i-47-2.rzd.ru",
         "Content-Type": "application/json",
-        "User-Agent": "RZD/2367 CFNetwork/1496.0.7 Darwin/23.5.0",
+        "User-Agent": "RZD/2367 CFNetwork/1568.300.101 Darwin/24.2.0",
         "Sec-Fetch-Site": "same-origin",
         "Accept-Language": "ru",
         "Accept-Encoding": "gzip, deflate, br"
@@ -88,6 +88,7 @@ async def get_train(origin, destination, date):
                 "withoutSeats": "y",
                 "dir": 0,
                 "tfl": 3,
+                "responseVersion": 2,
                 "protocolVersion": 47,
                 "hashCode": "{}".format(hashcode)}
 
@@ -120,19 +121,35 @@ async def get_train(origin, destination, date):
             attempts += 1
 
     # Список с номерами поездов, которые возвращает API (эти номера отличаются от тех, которые показываются на сайте)
-    train_nums = []
+    train_nums_data = {
+        "Сапсан": [],
+        "Ласточка": [],
+        "Скорые и пассажирские": []
+    }
 
     # Список с информацией по каждому поезду
-    train_list = []
+    train_list_data = {
+        "Сапсан": [],
+        "Ласточка": [],
+        "Скорые и пассажирские": []
+    }
 
     # Список с датой и временем отправления каждого поезда (по МСК)
-    departure_times = []
+    departure_times_data = {
+        "Сапсан": [],
+        "Ласточка": [],
+        "Скорые и пассажирские": []
+    }
 
     # Список с двухаэтажностью
-    is_two_storey_list = []
+    is_two_storey_data = {
+        "Сапсан": [],
+        "Ласточка": [],
+        "Скорые и пассажирские": []
+    }
 
-    # Для порядка отображения поездов
-    train_order = 0
+    # Инициализация словаря для нумерации (для порядка отображения поездов)
+    train_order_counter = {}
 
     # Установим часовой пояс
     moscow_tz = pytz.timezone("Europe/Moscow")
@@ -142,38 +159,46 @@ async def get_train(origin, destination, date):
 
     for train in range(len(data_res["result"]["timetables"][0]["list"])):
 
+        train_info = data_res["result"]["timetables"][0]["list"][train]
+
         # Строка с датой отправления по московскому времени (так как бот будет на сервере, на котором московское время)
-        date_str = (data_res["result"]["timetables"][0]["list"][train]["date0"] + " " +
-                    data_res["result"]["timetables"][0]["list"][train]["time0"])
+        # date0 и time0 возвращают дату и время по МСК для всех поездов
+        date_str = (train_info["date0"] + " " + train_info["time0"])
 
         # Переводим строку в объект datetime, чтобы сравнить с текущим временем
         departure_date = datetime.strptime(date_str, "%d.%m.%Y %H:%M").replace(tzinfo=moscow_tz)
 
-        # Оставляем только те поезда, которые еще не отправились, и убираем "Ласточки" и "Сапсаны" + пригородные
-        # электрички (у них среди прочих есть параметр subt, равный 1, который отсутствует у поездов дальнего
-        # следования)
-        if (departure_date > time_check and
-                data_res["result"]["timetables"][0]["list"][train]["brand"].lower() not in ["сапсан", "ласточка"] and
-                "subt" not in data_res["result"]["timetables"][0]["list"][train]):
+        # Оставляем только те поезда, которые еще не отправились, и убираем пригородные электрички (у них среди прочих
+        # есть параметр subt, равный 1, который отсутствует у поездов дальнего следования)
+        if departure_date > time_check and "subt" not in train_info:
 
-            # Меняем порядок отображения поездов
-            train_order += 1
+            # Определяем бренд поезда
+            brand = train_info["brand"].lower()
+            if "ласточка" in brand:
+                category = "Ласточка"
+            elif "сапсан" in brand:
+                category = "Сапсан"
+            else:
+                category = "Скорые и пассажирские"
+
+            if category not in train_order_counter:
+                train_order_counter[category] = 1  # Отдельный счётчик для каждой категории
+
+            train_order = train_order_counter[category]  # Получить текущий номер для категории
 
             # Добавляем номер поезда, который возвращает API
-            train_nums.append(data_res["result"]["timetables"][0]["list"][train]["number"])
+            train_nums_data[category].append(train_info["number"])
 
             # Добавляем дату и время отправления (по Москве)
-            departure_times.append(departure_date)
+            departure_times_data[category].append(departure_date)
 
             # Добавляем запись о двухэтажности
-            is_two_storey_list.append("двухэтажный" in data_res["result"]["timetables"][0]["list"][train]["brand"]
-                                      .lower())
+            is_two_storey_data[category].append("двухэтажный" in brand or "аврора" in brand)
 
             travel_time = "\U000023F3 "
 
-            # Часы в пути
-            hours = int(data_res["result"]["timetables"][0]["list"][train]["timeInWay"][
-                        :data_res["result"]["timetables"][0]["list"][train]["timeInWay"].index(":")])
+            # Часы и минуты в пути
+            hours, minutes = map(int, train_info["timeInWay"].split(":"))
 
             # Меняем окончания, чтобы читалось нормально
             # Если вдруг меньше часа
@@ -197,10 +222,6 @@ async def get_train(origin, destination, date):
 
                 travel_time += "{} час{} ".format(hours, "ов")
 
-            # Минуты в пути
-            minutes = int(data_res["result"]["timetables"][0]["list"][train]["timeInWay"][
-                          data_res["result"]["timetables"][0]["list"][train]["timeInWay"].index(":") + 1:])
-
             # Меняем окончания, чтобы читалось нормально
             if minutes == 1 or (minutes % 10 == 1 and minutes > 20):
                 travel_time += "{} минут{}".format(minutes, "а")
@@ -212,70 +233,74 @@ async def get_train(origin, destination, date):
             elif not minutes:
                 travel_time += ""
 
-            if "localTime0" in data_res["result"]["timetables"][0]["list"][train].keys() and "localTime1" in \
-                    data_res["result"]["timetables"][0]["list"][train].keys():
+            if "localTime0" in train_info.keys() and "localTime1" in \
+                    train_info.keys():
 
-                train_list.append(
+                train_list_data[category].append(
                     "{}.\n\U0001F686 {} — {}\n\U00000023\U0000FE0F\U000020E3 {} {}\n\U00002197\U0000FE0F {}, "
                     "{}\n\U00002198\U0000FE0F {}, {}\n".format(
                         train_order,
-                        data_res["result"]["timetables"][0]["list"][train]["route0"],
-                        data_res["result"]["timetables"][0]["list"][train]["route1"],
-                        data_res["result"]["timetables"][0]["list"][train]["number2"],
-                        data_res["result"]["timetables"][0]["list"][train]["brand"],
-                        format_date(data_res["result"]["timetables"][0]["list"][train]["localDate0"]),
-                        data_res["result"]["timetables"][0]["list"][train]["localTime0"],
-                        format_date(data_res["result"]["timetables"][0]["list"][train]["localDate1"]),
-                        data_res["result"]["timetables"][0]["list"][train]["localTime1"]) + travel_time)
+                        train_info["route0"],
+                        train_info["route1"],
+                        train_info["number2"],
+                        train_info["brand"],
+                        format_date(train_info["localDate0"]),
+                        train_info["localTime0"],
+                        format_date(train_info["localDate1"]),
+                        train_info["localTime1"]) + travel_time.strip())
 
-            elif "localTime0" in data_res["result"]["timetables"][0]["list"][train].keys():
+            elif "localTime0" in train_info.keys():
 
-                train_list.append(
+                train_list_data[category].append(
                     "{}.\n\U0001F686 {} — {}\n\U00000023\U0000FE0F\U000020E3 {} {}\n\U00002197\U0000FE0F {}, "
                     "{}\n\U00002198\U0000FE0F {}, {}\n".format(
                         train_order,
-                        data_res["result"]["timetables"][0]["list"][train]["route0"],
-                        data_res["result"]["timetables"][0]["list"][train]["route1"],
-                        data_res["result"]["timetables"][0]["list"][train]["number2"],
-                        data_res["result"]["timetables"][0]["list"][train]["brand"],
-                        format_date(data_res["result"]["timetables"][0]["list"][train]["localDate0"]),
-                        data_res["result"]["timetables"][0]["list"][train]["localTime0"],
-                        format_date(data_res["result"]["timetables"][0]["list"][train]["date1"]),
-                        data_res["result"]["timetables"][0]["list"][train]["time1"]) + travel_time)
+                        train_info["route0"],
+                        train_info["route1"],
+                        train_info["number2"],
+                        train_info["brand"],
+                        format_date(train_info["localDate0"]),
+                        train_info["localTime0"],
+                        format_date(train_info["date1"]),
+                        train_info["time1"]) + travel_time.strip())
 
-            elif "localTime1" in data_res["result"]["timetables"][0]["list"][train].keys():
+            elif "localTime1" in train_info.keys():
 
-                train_list.append(
+                train_list_data[category].append(
                     "{}.\n\U0001F686 {} — {}\n\U00000023\U0000FE0F\U000020E3 {} {}\n\U00002197\U0000FE0F {}, "
                     "{}\n\U00002198\U0000FE0F {}, {}\n".format(
                         train_order,
-                        data_res["result"]["timetables"][0]["list"][train]["route0"],
-                        data_res["result"]["timetables"][0]["list"][train]["route1"],
-                        data_res["result"]["timetables"][0]["list"][train]["number2"],
-                        data_res["result"]["timetables"][0]["list"][train]["brand"],
-                        format_date(data_res["result"]["timetables"][0]["list"][train]["date0"]),
-                        data_res["result"]["timetables"][0]["list"][train]["time0"],
-                        format_date(data_res["result"]["timetables"][0]["list"][train]["localDate1"]),
-                        data_res["result"]["timetables"][0]["list"][train]["localTime1"]) + travel_time)
+                        train_info["route0"],
+                        train_info["route1"],
+                        train_info["number2"],
+                        train_info["brand"],
+                        format_date(train_info["date0"]),
+                        train_info["time0"],
+                        format_date(train_info["localDate1"]),
+                        train_info["localTime1"]) + travel_time.strip())
 
             else:
 
-                train_list.append(
+                train_list_data[category].append(
                     "{}.\n\U0001F686 {} — {}\n\U00000023\U0000FE0F\U000020E3 {} {}\n\U00002197\U0000FE0F {}, "
                     "{}\n\U00002198\U0000FE0F {}, {}\n".format(
                         train_order,
-                        data_res["result"]["timetables"][0]["list"][train]["route0"],
-                        data_res["result"]["timetables"][0]["list"][train]["route1"],
-                        data_res["result"]["timetables"][0]["list"][train]["number2"],
-                        data_res["result"]["timetables"][0]["list"][train]["brand"],
-                        format_date(data_res["result"]["timetables"][0]["list"][train]["date0"]),
-                        data_res["result"]["timetables"][0]["list"][train]["time0"],
-                        format_date(data_res["result"]["timetables"][0]["list"][train]["date1"]),
-                        data_res["result"]["timetables"][0]["list"][train]["time1"]) + travel_time)
+                        train_info["route0"],
+                        train_info["route1"],
+                        train_info["number2"],
+                        train_info["brand"],
+                        format_date(train_info["date0"]),
+                        train_info["time0"],
+                        format_date(train_info["date1"]),
+                        train_info["time1"]) + travel_time.strip())
 
-    train_list_message = "{}\n\n" * len(train_nums)
+            train_order_counter[category] += 1
 
-    return train_list_message.format(*train_list), train_nums, departure_times, is_two_storey_list
+    # train_list_message = "{}\n\n" * len(train_nums)
+
+    # return train_list_message.format(*train_list), train_nums, departure_times, is_two_storey_list
+
+    return train_list_data, train_nums_data, departure_times_data, is_two_storey_data
 
 
 async def get_seats(origin_station, destination_station, date, train):
@@ -321,32 +346,43 @@ async def get_seats(origin_station, destination_station, date, train):
             moscow_spb_rid = data_res["result"]["rid"]
             data_res = await get_info_with_rid(moscow_spb_rid, hashcode, url)
 
-    # Фильтруем купе (обычные и инвалидные), плацкарт и СВ.
+    # Считаем места
 
-    counter = TrainSeatsCounter(data_res)
+    brand = data_res["result"]["lst"][0].get("brand", "").capitalize()
+    if brand == "Сапсан":
+        counter = SapsanSeatsCounter(data_res)
+    elif brand == "Ласточка":
+        counter = Lasto4kaSeatsCounter(data_res)
+    else:
+        counter = TrainSeatsCounter(data_res)
+
     counter.count_seats()
     available_seats = counter.get_available_seats()
     return available_seats
 
 
-# s = asyncio.run(get_train("2064570", "2004000", "26.06.2024"))
+# s = asyncio.run(get_train("2000000", "2004000", "26.04.2025"))
 # s = asyncio.run(get_train("2004000", "2064570", "26.05.2024"))
-# print(s[-2])
+# print([key for key in s[0].keys() if len(s[0][key]) > 0])
+# for key in s[0].keys():
+#     if len(s[0][key]) > 0:
+#         print(key)
+# print(s[0])
 # print(s[1])
 # print(s[0])
 # print(s[-1])
 # print(json.dumps(s, indent=4, ensure_ascii=False))
 
-
-# train_number = "035А"
-# origin_station = "2004000"
+# import json
+# train_number = "020С"
+# origin_station = "2000003"
 # destination_station = "2064570"
-# departure_date = "14.08.2024"
+# departure_date = "02.07.2025"
 # print(json.dumps(get_seats(origin_station, destination_station, departure_date, train_number)["coupe"], indent=4,
 #                  ensure_ascii=False))
 
 # lel = asyncio.run(get_seats(origin_station, destination_station, departure_date, train_number))
-# print(json.dumps(lel["coupe"], indent=4, ensure_ascii=False))
+# print(json.dumps(lel, indent=4, ensure_ascii=False))
 
 # user_choice = {
 #     "car_type": ["coupe", "lux"],

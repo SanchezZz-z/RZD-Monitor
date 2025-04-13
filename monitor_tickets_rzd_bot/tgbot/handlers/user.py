@@ -3,37 +3,36 @@ from aiogram.filters import CommandStart, Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
 
-# На сервере tgbot_template_v3 надо заменить на monitor_tickets_rzd_bot
-from tgbot_template_v3.tgbot.misc.states import Train, Monitor
+from db_connection import database_connection
+from testing import save_user, check_access
+# На сервере monitor_tickets_rzd_bot надо заменить на monitor_tickets_rzd_bot
+from monitor_tickets_rzd_bot.tgbot.misc.states import Train, Monitor
 
 user_router = Router()
-
-ALLOWED_USERS = [
-    5903431760,  # мой второй аккаунт
-    5988823498,  # мама
-    63951523,  # Никита
-    271926089,  # Мила
-    281943605,  # Маша
-    415360956,  # Кирилл
-    350266107,  # Богдана
-    1120554844,  # Данек
-]
 
 
 @user_router.message(CommandStart())
 async def user_start(message: Message, state: FSMContext):
-    # Если пользователь с доступом
-    if message.from_user.id in ALLOWED_USERS:
+    # Чистим любые сохраненные данные
+    await state.update_data({})
+    # Получаем пул соединений инициализированный при запуске бота
+    connection_pool = await database_connection.get_connection_pool()
+    user_id = message.from_user.id
+    username = message.from_user.username
+    await save_user(connection_pool, user_id, username)
+    # Если доступа нет
+    if not await check_access(connection_pool, message):
+        await message.reply("Приветствую, {}!\n"
+                            "К сожалению, у Вас нет доступа к этому боту:(\n"
+                            "Но может быть скоро появится...".format(message.from_user.first_name))
+    # Если доступ есть
+    else:
         await message.reply(("Приветствую, {}!\n\n"
                              "Вы в главном меню\n\n"
                              "/trains - посмотреть список поездов, удалить поезд или добавить новый\n\n"
                              "/monitor - посмотреть отслеживаемые поезда, удалить отслеживание или добавить новое"
                              .format(message.from_user.first_name)))
         await state.set_state(Train.main_menu)
-    # Если доступа нет
-    else:
-        await message.reply("Приветствую, {}!\n"
-                            "К сожалению, у Вас нет доступа к этому боту".format(message.from_user.first_name))
 
 
 # При рестарте возвращаем пользователя в состояние main_menu
