@@ -9,9 +9,9 @@
 # from db_connection import database_connection
 # from rzd_web_check_free_seat import free_seats_check, make_pdf_async
 # from testing import get_user_trains, get_train_info
-# from tgbot_template_v3.tgbot.keyboards.inline import select_train_to_check_free_seats_inline_keyboard, \
+# from monitor_tickets_rzd_bot.tgbot.keyboards.inline import select_train_to_check_free_seats_inline_keyboard, \
 #     UserTrainToCheckFreeSeatsOptionCallbackData, right_wrong_inline_keyboard
-# from tgbot_template_v3.tgbot.misc.states import Train
+# from monitor_tickets_rzd_bot.tgbot.misc.states import Train
 #
 # free_seats_menu_router = Router()
 #
