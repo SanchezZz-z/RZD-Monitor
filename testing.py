@@ -3,6 +3,7 @@ import re
 from collections import OrderedDict
 from datetime import datetime
 
+from aiogram import types
 from fuzzywuzzy import process
 import asyncpg
 
@@ -53,7 +54,7 @@ async def add_user_train(pool, values):
         try:
             async with connection.transaction():
                 (user_id, origin_station, destination_station, trip_date, train_num,
-                 train_info, departure_timestamp, is_two_storey) = values
+                 train_info, departure_timestamp, is_two_storey, train_type) = values
                 if isinstance(trip_date, datetime):
                     trip_date = trip_date.date()
                 if isinstance(departure_timestamp, datetime) and departure_timestamp.tzinfo is not None:
@@ -61,11 +62,11 @@ async def add_user_train(pool, values):
                 # Используем параметры для передачи значений, чтобы избежать проблем с кодировкой
                 query = (
                     "INSERT INTO user_trains (user_id, origin_station, destination_station, trip_date, train_num,"
-                    "                         train_info, departure_timestamp, is_two_storey) "
-                    "VALUES ($1, $2, $3, $4, $5, $6, $7, $8);"
+                    "                         train_info, departure_timestamp, is_two_storey, train_type) "
+                    "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);"
                 )
-                await connection.execute(query, user_id, origin_station, destination_station, trip_date,
-                                         train_num, train_info, departure_timestamp, is_two_storey)
+                await connection.execute(query, user_id, origin_station, destination_station, trip_date, train_num,
+                                         train_info, departure_timestamp, is_two_storey, train_type)
             return "\U00002705 Поезд успешно добавлен в список Ваших поездов"
         except asyncpg.exceptions.UniqueViolationError:
             return "\U00002757 Этот поезд уже был добавлен ранее"
@@ -103,7 +104,8 @@ async def get_train_info(pool, train_id, monitor=True):
                     "   origin_station,"
                     "   destination_station,"
                     "   is_two_storey,"
-                    "   train_info "
+                    "   train_info,"
+                    "   train_type "
                     "FROM user_trains "
                     "WHERE id = $1;"
                 )
@@ -377,6 +379,61 @@ async def get_monitor_task_config(pool, monitor_task_id):
             return monitor_setup_dict
         else:
             return None
+
+
+# Сохраняем всех пользователей, взаимодействовавших с ботом
+# Просто API телеграма не позволяет получить user_id пользователя через его username, значит для получения user_id
+# необходимо, чтобы пользователь сначала сам написал боту, а затем я (админ) добавлю его айди в список разрешенных
+async def save_user(pool, user_id, username):
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO users (user_id, username)
+            VALUES ($1, $2)
+            ON CONFLICT (user_id) DO UPDATE
+            SET username = EXCLUDED.username
+            """,
+            user_id, username
+        )
+
+# Функция для получения user_id
+async def get_user_id_by_username(pool, username):
+    async with pool.acquire() as conn:
+        result = await conn.fetchrow(
+            "SELECT user_id FROM users WHERE username = $1",
+            username
+        )
+        return result["user_id"] if result else None
+
+# Функция для выдачи доступа к боту
+async def add_allowed_user(pool, user_id):
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO allowed_users (user_id) VALUES ($1) ON CONFLICT DO NOTHING",
+            user_id
+        )
+
+# Функция для удаления доступа к боту
+async def remove_allowed_user(pool, user_id):
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "DELETE FROM allowed_users WHERE user_id = $1",
+            user_id
+        )
+
+# Проверка доступа
+async def is_user_allowed(pool, user_id):
+    async with pool.acquire() as conn:
+        result = await conn.fetchrow(
+            "SELECT 1 FROM allowed_users WHERE user_id = $1",
+            user_id
+        )
+        return bool(result)
+
+# Фильтр для проверки доступа
+async def check_access(pool, message: types.Message):
+    user_id = message.from_user.id
+    return await is_user_allowed(pool, user_id)
 
 
 # async def main():
