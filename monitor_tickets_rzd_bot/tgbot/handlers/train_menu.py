@@ -13,12 +13,12 @@ from rzd_app import get_train
 from testing import find_matches, load_stations, add_user_train, get_user_trains, delete_selected_trains, \
     get_user_choice
 from ..calendar import SimpleCalendar, get_user_locale, SimpleCalendarCallback
-from tgbot_template_v3.tgbot.keyboards.inline import confirm_station_inline_keyboard, StationOptionCallbackData, \
+from monitor_tickets_rzd_bot.tgbot.keyboards.inline import confirm_station_inline_keyboard, StationOptionCallbackData, \
     right_wrong_inline_keyboard, start_menu_inline_keyboard, UserTrainToDeleteOptionCallbackData, \
-    few_options_inline_keyboard
-# from tgbot_template_v3.tgbot.keyboards.reply import confirm_train_reply_keyboard
+    few_options_inline_keyboard, select_train_type_inline_keyboard, TrainTypesOptionCallbackData
+# from monitor_tickets_rzd_bot.tgbot.keyboards.reply import confirm_train_reply_keyboard
 from ..keyboards.reply import confirm_train_reply_keyboard
-from tgbot_template_v3.tgbot.misc.states import Train
+from monitor_tickets_rzd_bot.tgbot.misc.states import Train
 
 train_menu_router = Router()
 
@@ -460,30 +460,70 @@ async def trip_info_right(callback_query: CallbackQuery, state: FSMContext):
             await callback_query.message.answer("Пожалуйста, введите станцию отправления")
 
         # Если поезда все-таки есть
+
         else:
 
-            # В случае, если размер сообщения с поездами превышает максимальный допустимый (то есть, поездов слишком
-            # много, как, например, по маршруту Москва - Тверь), то делим его пополам и отправляем двумя сообщениями
-            # (хотя, с другой стороны если поездов настолько много, то на них не должно быть дефицита билетов)
-            if len(trains_options[0]) > 4096:
-                trains_list = trains_options[0].strip().split("\n\n")
-                first_message = "\n\n".join(trains_list[:(len(trains_options[1])) // 2])
-                second_message = "\n\n".join(trains_list[(len(trains_options[1])) // 2:])
-                await callback_query.message.edit_text(first_message)
-                await callback_query.message.answer(second_message + "\n\nПожалуйста, выберите нужный поезд"
-                                                                     "\nЕсли нужного "
-                                                                     "поезда нет в списке выберите 0",
-                                                    reply_markup=confirm_train_reply_keyboard(trains_options[1]),
-                                                    one_time_keyboard=True)
-            else:
-                await callback_query.message.edit_text(trains_options[0][:-2])
-                await callback_query.message.answer("Пожалуйста, выберите нужный поезд\nЕсли нужного"
-                                                    " поезда нет в списке выберите 0",
-                                                    reply_markup=confirm_train_reply_keyboard(trains_options[1]),
-                                                    one_time_keyboard=True)
+            # Сохраним типы поездов, которые нашлись для выбранного маршрута
 
-            # Переходим в состояние подтверждения поезда
-            await state.set_state(Train.confirm_train)
+            train_type_options = [key for key in trains_options[0].keys() if len(trains_options[0][key]) > 0]
+            train_types = []
+
+            for i in range(1, len(train_type_options) + 1):
+                train_types.append({"id": i, "train_type": train_type_options[i - 1]})
+
+            await state.update_data(train_types=train_types)
+
+            # Если у нас только один тип поездов (скорее всего, это "Скорые и пассажирские", то есть обычные поезда), то
+            # сразу выводим сообщение с этим типом поездов. Но если у нас есть несколько типов поездов, как, например,
+            # между Москвой и Санкт-Петербургом, тогда необходимо еще уточнить у пользователя тип поезда
+
+            if len(train_types) == 1:
+
+                # Если тип поезда всего один, то считаем, что у пользователя нет выбора
+
+                await state.update_data(selected_train_type=train_types[0]["train_type"])
+
+                trains_message = "{}\n\n" * len(trains_options[0][train_types[0]["train_type"]])
+                trains_message = trains_message.format(*trains_options[0][train_types[0]["train_type"]])
+
+                # В случае, если размер сообщения с поездами превышает максимальный допустимый (то есть, поездов слишком
+                # много, как, например, по маршруту Москва - Тверь), то делим его пополам и отправляем двумя сообщениями
+                # (хотя, с другой стороны если поездов настолько много, то на них не должно быть дефицита билетов)
+
+                if len(trains_message) > 4096:
+                    trains_list = trains_message.strip().split("\n\n")
+                    first_message = "\n\n".join(trains_list[:(len(trains_list)) // 2])
+                    second_message = "\n\n".join(trains_list[(len(trains_list)) // 2:])
+                    await callback_query.message.edit_text(first_message)
+                    await callback_query.message.answer(second_message + "\n\nПожалуйста, выберите нужный поезд"
+                                                                         "\nЕсли нужного "
+                                                                         "поезда нет в списке выберите 0",
+                                                        reply_markup=confirm_train_reply_keyboard(trains_options[1]),
+                                                        one_time_keyboard=True)
+                else:
+                    await callback_query.message.edit_text(trains_message[:-2])
+                    await callback_query.message.answer("Пожалуйста, выберите нужный поезд\nЕсли нужного"
+                                                        " поезда нет в списке выберите 0",
+                                                        reply_markup=confirm_train_reply_keyboard(trains_options[1][train_types[0]["train_type"]]),
+                                                        one_time_keyboard=True)
+
+                # Переходим в состояние подтверждения поезда
+                await state.set_state(Train.confirm_train)
+
+            # А если у нас есть несколько типов поездов, тогда необходимо, чтобы пользователь выбрал какой-то один
+
+            else:
+
+
+                await callback_query.message.edit_text(
+                    "Пожалуйста, выберите тип поезда",
+                    reply_markup=select_train_type_inline_keyboard(train_types)
+                )
+
+                # Переходим в состояние выбора типа поезда
+
+                await state.set_state(Train.select_train_type)
+
     except httpx.ReadTimeout:
         await callback_query.message.edit_text(text="Упс, ожидание ответа от сервера заняло слишком много времени\n"
                                                     "Нажмите на кнопку под этим сообщением, чтобы попробовать еще раз",
@@ -495,12 +535,87 @@ async def trip_info_right(callback_query: CallbackQuery, state: FSMContext):
                                                ).as_markup())
 
 
+# Выбор типа поезда (при необходимости)
+@train_menu_router.callback_query(Train.select_train_type, TrainTypesOptionCallbackData.filter())
+async def confirm_train_type(callback_query: CallbackQuery, callback_data: TrainTypesOptionCallbackData,
+                               state: FSMContext):
+    await callback_query.answer()
+
+    user_data = await state.get_data()
+
+    # Получаем id типа поезда, который выбрал пользователь
+
+    train_type_id = callback_data.train_type
+    selected_train_type = user_data["train_types"][train_type_id - 1]["train_type"]
+
+    # Сохраняем выбор пользователя
+    await state.update_data(selected_train_type=selected_train_type)
+
+    text = ("Выбранный тип поезда:\n\n<i><u>{}</u></i>\n\nВерно?"
+            .format(selected_train_type))
+
+    # Переходим в состояние подтверждения типа поезда
+    await state.set_state(Train.confirm_train_type)
+
+    await callback_query.message.edit_text(text, reply_markup=right_wrong_inline_keyboard())
+
+# Если пользователь мискликнул тип поезда
+@train_menu_router.callback_query(Train.confirm_train_type, F.data == "wrong")
+async def train_type_wrong(callback_query: CallbackQuery, state: FSMContext):
+    await callback_query.answer()
+
+    user_data = await state.get_data()
+    # Возвращаем в предыдущее состояние
+    await state.set_state(Train.select_train_type)
+    # Удалим сохраненные ранее выбранные типы вагонов
+    await state.update_data(selected_train_type=None)
+    # Снова покажем список поездов пользователя и почистим его старый выбор
+    await callback_query.message.edit_text(
+        "Пожалуйста, выберите тип поезда",
+        reply_markup=select_train_type_inline_keyboard(user_data["train_types"])
+    )
+
+# Если пользователь подтвердил тип поезда, тогда выводим информацию и просим выбрать поезд
+@train_menu_router.callback_query(Train.confirm_train_type, F.data == "correct")
+async def train_type_right(callback_query: CallbackQuery, state: FSMContext):
+    await callback_query.answer()
+
+    user_data = await state.get_data()
+
+    trains_message = "{}\n\n" * len(user_data["trains_options"][0][user_data["selected_train_type"]])
+    trains_message = trains_message.format(*user_data["trains_options"][0][user_data["selected_train_type"]])
+
+    # В случае, если размер сообщения с поездами превышает максимальный допустимый (то есть, поездов слишком
+    # много, как, например, по маршруту Москва - Тверь), то делим его пополам и отправляем двумя сообщениями
+    # (хотя, с другой стороны если поездов настолько много, то на них не должно быть дефицита билетов)
+
+    if len(trains_message) > 4096:
+        trains_list = trains_message.strip().split("\n\n")
+        first_message = "\n\n".join(trains_list[:(len(trains_list)) // 2])
+        second_message = "\n\n".join(trains_list[(len(trains_list)) // 2:])
+        await callback_query.message.edit_text(first_message)
+        await callback_query.message.answer(second_message + "\n\nПожалуйста, выберите нужный поезд"
+                                                             "\nЕсли нужного "
+                                                             "поезда нет в списке выберите 0",
+                                            reply_markup=confirm_train_reply_keyboard(user_data["trains_options"][1]),
+                                            one_time_keyboard=True)
+    else:
+        await callback_query.message.edit_text(trains_message[:-2])
+        await callback_query.message.answer("Пожалуйста, выберите нужный поезд\nЕсли нужного"
+                                            " поезда нет в списке выберите 0",
+                                            reply_markup=confirm_train_reply_keyboard(
+                                                user_data["trains_options"][1][user_data["selected_train_type"]]),
+                                            one_time_keyboard=True)
+
+    # Переходим в состояние подтверждения поезда
+    await state.set_state(Train.confirm_train)
+
 # Если пользователь ввел что-то кроме цифр
 @train_menu_router.message(Train.confirm_train, ~F.text.strip().isdigit())
 async def confirm_train_wrong_input(message: types.Message, state: FSMContext):
     user_data = await state.get_data()
 
-    num_of_trains = len(user_data["trains_options"][1])
+    num_of_trains = sum(len(lst) for lst in user_data["trains_options"][1].values())
 
     if num_of_trains == 1:
 
@@ -522,7 +637,7 @@ async def confirm_train_wrong_input(message: types.Message, state: FSMContext):
 async def confirm_train(message: types.Message, state: FSMContext):
     user_data = await state.get_data()
 
-    num_of_trains = len(user_data["trains_options"][1])
+    num_of_trains = sum(len(lst) for lst in user_data["trains_options"][1].values())
 
     # Если пользователь ввел 0 (нужного поезда нет в списке)
 
@@ -553,8 +668,11 @@ async def confirm_train(message: types.Message, state: FSMContext):
         # Сохраним выбор пользователя
         await state.update_data(train_choice=int(message.text))
 
+        trains_message = "{}\n\n" * len(user_data["trains_options"][0][user_data["selected_train_type"]])
+        trains_message = trains_message.format(*user_data["trains_options"][0][user_data["selected_train_type"]])
+
         # Представим сообщение в виде списка, чтобы после ответа пользователя уточнить, уверен ли он в своем выборе
-        trains_list = user_data["trains_options"][0].strip().split("\n\n")
+        trains_list = trains_message.strip().split("\n\n")
 
         # Информация по выбранному поезду
         selected_train_info = "".join(trains_list[int(message.text.strip()) - 1].split("\n", maxsplit=1)[1])
@@ -577,18 +695,22 @@ async def confirm_train_fail(callback_query: CallbackQuery, state: FSMContext):
     # Удалим сохраненный ранее выбор поезда и информацию о выбранном поезде
     await state.update_data(train_choice=None)
     await state.update_data(selected_train_info=None)
+
+    trains_message = "{}\n\n" * len(user_data["trains_options"][0][user_data["selected_train_type"]])
+    trains_message = trains_message.format(*user_data["trains_options"][0][user_data["selected_train_type"]])
+
     # Если пользователь опечатался, то фактически надо просто повторить шаг с выводом доступных поездов и вводом номера
     # как в корутине trip_info_right
-    if len(user_data["trains_options"][0]) > 4096:
-        trains_list = user_data["trains_options"][0].strip().split("\n\n")
-        first_message = "\n\n".join(trains_list[:(len(user_data["trains_options"][1])) // 2])
-        second_message = "\n\n".join(trains_list[(len(user_data["trains_options"][1])) // 2:])
+    if len(trains_message) > 4096:
+        trains_list = trains_message.strip().split("\n\n")
+        first_message = "\n\n".join(trains_list[:(len(trains_list)) // 2])
+        second_message = "\n\n".join(trains_list[(len(trains_list)) // 2:])
         await callback_query.message.edit_text(first_message)
         await callback_query.message.answer(second_message + "\n\nПожалуйста, выберите нужный поезд"
                                                              "\nЕсли нужного "
                                                              "поезда нет в списке выберите 0")
     else:
-        await callback_query.message.edit_text(user_data["trains_options"][0][:-2] +
+        await callback_query.message.edit_text(trains_message[:-2] +
                                                "\n\nПожалуйста, выберите нужный поезд\nЕсли нужного "
                                                "поезда нет в списке выберите 0")
 
@@ -600,8 +722,11 @@ async def add_train(callback_query: CallbackQuery, state: FSMContext):
     # Подтянем данные пользователя, чтобы получить всю необходимую информацию
     user_data = await state.get_data()
 
+    # Тип поезда
+    train_type = user_data["selected_train_type"]
+
     # Номер поезда (в том виде, в котором он получен от API)
-    train_num = user_data["trains_options"][1][user_data["train_choice"] - 1]
+    train_num = user_data["trains_options"][1][train_type][user_data["train_choice"] - 1]
 
     # Код станции отправления
     origin_station = user_data["start_station_expressCode"]
@@ -625,10 +750,10 @@ async def add_train(callback_query: CallbackQuery, state: FSMContext):
     train_info = user_route + train_info
 
     # Время отправления
-    departure_time = user_data["trains_options"][2][user_data["train_choice"] - 1]
+    departure_time = user_data["trains_options"][2][train_type][user_data["train_choice"] - 1]
 
     # Запись о двухэтажности (True / False)
-    is_two_storey = user_data["trains_options"][3][user_data["train_choice"] - 1]
+    is_two_storey = user_data["trains_options"][3][train_type][user_data["train_choice"] - 1]
 
     # Полностью чистим сохраненные данные, состояние сохраняем
     await state.set_data({})
@@ -640,8 +765,8 @@ async def add_train(callback_query: CallbackQuery, state: FSMContext):
     connection_pool = await database_connection.get_connection_pool()
 
     add_train_message = await add_user_train(connection_pool, (callback_query.from_user.id, origin_station,
-                                                               destination_station, trip_date, train_num,
-                                                               train_info, departure_time, is_two_storey))
+                                                               destination_station, trip_date, train_num, train_info,
+                                                               departure_time, is_two_storey, train_type))
 
     await callback_query.message.edit_text(add_train_message +
                                            "\n\n/trains - к списку поездов\n"
