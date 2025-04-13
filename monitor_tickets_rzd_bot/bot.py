@@ -13,6 +13,7 @@ from tgbot.config import load_config, Config
 from tgbot.handlers import routers_list
 from tgbot.middlewares.config import ConfigMiddleware
 from tgbot.services import broadcaster
+from monitor_tickets_rzd_bot.tgbot.middlewares.access_checker import AccessMiddleware
 
 
 async def on_startup(bot: Bot, admin_ids: list[int]):
@@ -32,6 +33,7 @@ def register_global_middlewares(dp: Dispatcher, config: Config, session_pool=Non
     """
     middleware_types = [
         ConfigMiddleware(config),
+        AccessMiddleware(),
         # DatabaseMiddleware(session_pool),
     ]
 
@@ -92,15 +94,15 @@ async def main():
     config = load_config(".env")
     storage = get_storage(config)
 
+    # Инициализация пула соединений с базой данных
+    await database_connection.init_connection_pool(config.db)
+
     bot = Bot(token=config.tg_bot.token, default=DefaultBotProperties(parse_mode="HTML"))
     dp = Dispatcher(storage=storage)
 
     dp.include_routers(*routers_list)
 
     register_global_middlewares(dp, config)
-
-    # Инициализация пула соединений с базой данных
-    await database_connection.init_connection_pool(config.db)
 
     # Запуск монитора как фоновой задачи
     asyncio.create_task(monitor(bot))
