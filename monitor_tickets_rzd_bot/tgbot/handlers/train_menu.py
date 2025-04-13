@@ -8,9 +8,9 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from db_connection import database_connection
-from rzd_app import get_train
-from testing import find_matches, load_stations, add_user_train, get_user_trains, delete_selected_trains, \
+from monitor_tickets_rzd_bot.db_connection import database_connection
+from monitor_tickets_rzd_bot.rzd_app import get_train
+from monitor_tickets_rzd_bot.testing import find_matches, load_stations, add_user_train, get_user_trains, delete_selected_trains, \
     get_user_choice
 from ..calendar import SimpleCalendar, get_user_locale, SimpleCalendarCallback
 from monitor_tickets_rzd_bot.tgbot.keyboards.inline import confirm_station_inline_keyboard, StationOptionCallbackData, \
@@ -22,7 +22,7 @@ from monitor_tickets_rzd_bot.tgbot.misc.states import Train
 
 train_menu_router = Router()
 
-file_path = "/Users/sanchezzzz/PycharmProjects/RZD/stations v2.0.json"
+file_path = "stations v2.0.json"
 stations_data = load_stations(file_path)
 
 

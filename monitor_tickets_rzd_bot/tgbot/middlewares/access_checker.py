@@ -1,7 +1,7 @@
 from aiogram import BaseMiddleware, types
 
-from db_connection import database_connection
-from testing import save_user, is_user_allowed
+from monitor_tickets_rzd_bot.db_connection import database_connection
+from monitor_tickets_rzd_bot.testing import save_user, is_user_allowed
 from monitor_tickets_rzd_bot.tgbot.filters.admin import AdminFilter
 
 

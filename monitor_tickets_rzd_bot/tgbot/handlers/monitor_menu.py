@@ -6,13 +6,13 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from db_connection import database_connection
-from monitor_setup import generate_user_messages, generate_sapsan_paths, generate_sapsan_user_messages, \
-    generate_lastochka_paths, generate_lastochka_user_messages
-from rzd_app import get_seats
-from testing import get_user_trains, get_train_info, add_train_to_monitor, add_monitor_task, get_active_monitors, \
+from monitor_tickets_rzd_bot.db_connection import database_connection
+from monitor_tickets_rzd_bot.monitor_setup import generate_user_messages, generate_sapsan_user_messages, \
+    generate_lastochka_user_messages
+from monitor_tickets_rzd_bot.rzd_app import get_seats
+from monitor_tickets_rzd_bot.testing import get_user_trains, get_train_info, add_train_to_monitor, add_monitor_task, get_active_monitors, \
     get_user_choice, delete_selected_monitors, quick_restore_task_check, quick_restore_task_setup, quick_restore_task
-from const import *
+from monitor_tickets_rzd_bot.const import *
 from monitor_tickets_rzd_bot.tgbot.keyboards.inline import select_train_to_monitor_inline_keyboard, \
     UserTrainToMonitorOptionCallbackData, right_wrong_inline_keyboard, select_car_type_inline_keyboard, \
     select_gender_inline_keyboard, ask_same_gender_inline_keyboard, pets_allowed_inline_keyboard, \
