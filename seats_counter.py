@@ -419,6 +419,1442 @@ class TrainSeatsCounter:
 
     # Этот метод чисто для быстрой проверки, что количество мест посчитано верно
     # По факту он не используется (он реализован немного коряво, но считает правильно)
+
+    def get_available_seats(self, data=None):
+
+        if data is None:
+            data = self.available
+
+        if isinstance(data, dict):
+            total = 0
+            for key, value in data.items():
+                if key == "total":
+                    continue
+                if isinstance(value, dict):
+                    # Рекурсивный вызов метода update_totals
+                    self.get_available_seats(value)
+                    total += value.get("total", 0)
+                elif isinstance(value, list):
+                    total += len(value)
+            data["total"] = total
+
+        return self.available
+
+
+class SapsanSeatsCounter:
+    def __init__(self, data):
+        self.data = data
+        self.available = {
+            "first_class": self.init_first_class_data(),
+            "negotiation_coupe": self.init_negotiation_coupe_data(),
+            "business_coupe": self.init_business_coupe_data(),
+            "business_class": self.init_business_class_data(),
+            "coupe_suite": self.init_coupe_suite_data(),
+            "bistro_car": self.init_bistro_data(),
+            "family": self.init_family_data(),
+            "eco_plus": self.init_eco_plus_data(),
+            "eco": self.init_eco_data(),
+            "base": self.init_base_data(),
+        }
+
+    def init_first_class_data(self):
+        return {
+            "total": 0,
+            "forward": {"total": 0, "no_table": {}, "separate": {}},
+            "backwards": {"total": 0, "no_table": {}},
+        }
+
+    def init_negotiation_coupe_data(self):
+        return {
+            "total": 0,
+            "coupe": {"total": 0, "seats": {}},
+        }
+
+    def init_business_coupe_data(self):
+        return {
+            "total": 0,
+            "coupe": {"total": 0, "seats": {}},
+        }
+
+    def init_business_class_data(self):
+        return {
+            "total": 0,
+            "forward": {"total": 0, "no_table": {}, "table": {}},
+            "backwards": {"total": 0, "no_table": {}, "table": {}},
+        }
+
+    def init_coupe_suite_data(self):
+        return {
+            "total": 0,
+            "coupe": {"total": 0, "seats": {}},
+        }
+
+    def init_bistro_data(self):
+        return {
+            "total": 0,
+            "forward": {"total": 0, "table": {}},
+            "backwards": {"total": 0, "table": {}},
+        }
+
+    def init_family_data(self):
+        return {
+            "total": 0,
+            "forward": {"total": 0, "no_table": {}, "table": {}},
+            "kids": {"total": 0, "seats": {}},
+        }
+
+    def init_eco_plus_data(self):
+        return {
+            "total": 0,
+            "forward": {"total": 0, "no_table": {}, "table": {}},
+            "backwards": {"total": 0, "no_table": {}, "table": {}},
+            "kids": {"total": 0, "seats": {}},
+            "babies": {"total": 0, "seats": {}},
+        }
+
+    def init_eco_data(self):
+        return {
+            "total": 0,
+            "forward": {"total": 0, "no_table": {}, "table": {}, "no_window": {}},
+            "backwards": {"total": 0, "no_table": {}, "table": {}, "no_window": {}},
+            "pets": {"total": 0, "seats": {}},
+            "disabled": {"total": 0, "seats": {}},
+        }
+
+    def init_base_data(self):
+        return {
+            "total": 0,
+            "forward": {"total": 0, "no_table": {}, "table": {}, "no_window": {}},
+            "backwards": {"total": 0, "no_table": {}, "table": {}, "no_window": {}},
+        }
+
+    def count_seats(self):
+
+        for car in self.data["result"]["lst"][0]["cars"]:
+
+            car_number = int(car["cnumber"])
+            car_type = car["catLabelLoc"]
+
+            if car_type == "Первый класс":
+
+                for seat in car["seats"]:
+                    self.update_first_class_seats(car_number, seat)
+
+            elif car_type == "Купе-переговорная":
+
+                for seat in car["seats"]:
+                    self.update_negotiation_coupe_seats(car_number, seat)
+
+            elif car_type == "Бизнес-купе":
+
+                for seat in car["seats"]:
+                    self.update_business_coupe_seats(car_number, seat)
+
+            elif car_type == "Бизнес класс":
+
+                for seat in car["seats"]:
+                    self.update_business_class_seats(car_number, seat)
+
+            elif car_type == "Купе-Сьют":
+
+                for seat in car["seats"]:
+                    self.update_coupe_suite_seats(car_number, seat)
+
+            elif car_type == "Вагон-бистро":
+
+                for seat in car["seats"]:
+                    self.update_bistro_seats(car_number, seat)
+
+            elif car_type == "Семейный":
+
+                for seat in car["seats"]:
+                    self.update_family_seats(car_number, seat)
+
+            elif car_type == "Эконом+":
+
+                for seat in car["seats"]:
+                    self.update_eco_plus_seats(car_number, seat)
+
+            elif car_type == "Эконом":
+
+                for seat in car["seats"]:
+                    self.update_eco_seats(car_number, seat)
+
+            elif car_type == "Базовый":
+
+                for seat in car["seats"]:
+                    self.update_base_seats(car_number, seat)
+
+    def update_first_class_seats(self, car_number, seat):
+
+        seat_type = seat["label"].replace(",", "")
+        free_seats = parse_places(seat["places"]) if "-" in seat["places"] else seat["places"].split(",")
+        price = int(seat["tariff"])
+        price_non_refundable = seat["tariff2"]
+
+        if seat_type == "Не у стола против хода":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["first_class"]["backwards"]["no_table"][car_number] = \
+                    (self.available["first_class"]["backwards"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["first_class"]["backwards"]["no_table"][car_number] = \
+                    (self.available["first_class"]["backwards"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "Не у стола по ходу":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["first_class"]["forward"]["no_table"][car_number] = \
+                    (self.available["first_class"]["forward"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["first_class"]["forward"]["no_table"][car_number] = \
+                    (self.available["first_class"]["forward"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "Свободные места":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["first_class"]["forward"]["separate"][car_number] = \
+                    (self.available["first_class"]["forward"]["separate"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["first_class"]["forward"]["separate"][car_number] = \
+                    (self.available["first_class"]["forward"]["separate"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+    def update_negotiation_coupe_seats(self, car_number, seat):
+
+        free_seats = parse_places(seat["places"]) if "-" in seat["places"] else seat["places"].split(",")
+        price = int(seat["tariff"])
+        price_non_refundable = seat["tariff2"]
+
+        if price_non_refundable is not None:
+
+            price_non_refundable = int(price_non_refundable)
+            price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+            self.available["negotiation_coupe"]["coupe"]["seats"][car_number] = \
+                (self.available["negotiation_coupe"]["coupe"]["seats"].get(car_number, []) +
+                 [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+        else:
+
+            self.available["negotiation_coupe"]["coupe"]["seats"][car_number] = \
+                (self.available["negotiation_coupe"]["coupe"]["seats"].get(car_number, []) +
+                 [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+    def update_business_coupe_seats(self, car_number, seat):
+
+        free_seats = parse_places(seat["places"]) if "-" in seat["places"] else seat["places"].split(",")
+        price = int(seat["tariff"])
+        price_non_refundable = seat["tariff2"]
+
+        if price_non_refundable is not None:
+
+            price_non_refundable = int(price_non_refundable)
+            price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+            self.available["business_coupe"]["coupe"]["seats"][car_number] = \
+                (self.available["business_coupe"]["coupe"]["seats"].get(car_number, []) +
+                 [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+        else:
+
+            self.available["business_coupe"]["coupe"]["seats"][car_number] = \
+                (self.available["business_coupe"]["coupe"]["seats"].get(car_number, []) +
+                 [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+    def update_business_class_seats(self, car_number, seat):
+
+        seat_type = seat["label"].replace(",", "")
+        free_seats = parse_places(seat["places"]) if "-" in seat["places"] else seat["places"].split(",")
+        price = int(seat["tariff"])
+        price_non_refundable = seat["tariff2"]
+
+        if seat_type == "Не у стола против хода":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["business_class"]["backwards"]["no_table"][car_number] = \
+                    (self.available["business_class"]["backwards"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["business_class"]["backwards"]["no_table"][car_number] = \
+                    (self.available["business_class"]["backwards"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "Не у стола по ходу":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["business_class"]["forward"]["no_table"][car_number] = \
+                    (self.available["business_class"]["forward"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["business_class"]["forward"]["no_table"][car_number] = \
+                    (self.available["business_class"]["forward"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "У стола против хода":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["business_class"]["backwards"]["table"][car_number] = \
+                    (self.available["business_class"]["backwards"]["table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["business_class"]["backwards"]["table"][car_number] = \
+                    (self.available["business_class"]["backwards"]["table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "У стола по ходу":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["business_class"]["forward"]["table"][car_number] = \
+                    (self.available["business_class"]["forward"]["table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["business_class"]["forward"]["table"][car_number] = \
+                    (self.available["business_class"]["forward"]["table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+    def update_coupe_suite_seats(self, car_number, seat):
+
+        free_seats = parse_places(seat["places"]) if "-" in seat["places"] else seat["places"].split(",")
+        price = int(seat["tariff"])
+        price_non_refundable = seat["tariff2"]
+
+        if price_non_refundable is not None:
+
+            price_non_refundable = int(price_non_refundable)
+            price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+            self.available["coupe_suite"]["coupe"]["seats"][car_number] = \
+                (self.available["coupe_suite"]["coupe"]["seats"].get(car_number, []) +
+                 [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+        else:
+
+            self.available["coupe_suite"]["coupe"]["seats"][car_number] = \
+                (self.available["coupe_suite"]["coupe"]["seats"].get(car_number, []) +
+                 [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+    def update_bistro_seats(self, car_number, seat):
+
+        seat_type = seat["label"].replace(",", "")
+        free_seats = parse_places(seat["places"]) if "-" in seat["places"] else seat["places"].split(",")
+        price = int(seat["tariff"])
+        price_non_refundable = seat["tariff2"]
+
+        if seat_type == "У стола против хода":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["bistro_car"]["backwards"]["table"][car_number] = \
+                    (self.available["bistro_car"]["backwards"]["table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["bistro_car"]["backwards"]["table"][car_number] = \
+                    (self.available["bistro_car"]["backwards"]["table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "У стола по ходу":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["bistro_car"]["forward"]["table"][car_number] = \
+                    (self.available["bistro_car"]["forward"]["table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["bistro_car"]["forward"]["table"][car_number] = \
+                    (self.available["bistro_car"]["forward"]["table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+    def update_family_seats(self, car_number, seat):
+
+        seat_type = seat["label"].replace(",", "")
+        free_seats = parse_places(seat["places"]) if "-" in seat["places"] else seat["places"].split(",")
+        price = int(seat["tariff"])
+        price_non_refundable = seat["tariff2"]
+
+        if seat_type == "Не у стола по ходу":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["family"]["forward"]["no_table"][car_number] = \
+                    (self.available["family"]["forward"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["family"]["forward"]["no_table"][car_number] = \
+                    (self.available["family"]["forward"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "Место пассажира с детьми":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["family"]["kids"]["seats"][car_number] = \
+                    (self.available["family"]["kids"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["family"]["kids"]["seats"][car_number] = \
+                    (self.available["family"]["kids"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+    def update_eco_plus_seats(self, car_number, seat):
+
+        seat_type = seat["label"].replace(",", "")
+        free_seats = parse_places(seat["places"]) if "-" in seat["places"] else seat["places"].split(",")
+        price = int(seat["tariff"])
+        price_non_refundable = seat["tariff2"]
+
+        if seat_type == "Не у стола против хода":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["eco_plus"]["backwards"]["no_table"][car_number] = \
+                    (self.available["eco_plus"]["backwards"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["eco_plus"]["backwards"]["no_table"][car_number] = \
+                    (self.available["eco_plus"]["backwards"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "Не у стола по ходу":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["eco_plus"]["forward"]["no_table"][car_number] = \
+                    (self.available["eco_plus"]["forward"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["eco_plus"]["forward"]["no_table"][car_number] = \
+                    (self.available["eco_plus"]["forward"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "У стола против хода":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["eco_plus"]["backwards"]["table"][car_number] = \
+                    (self.available["eco_plus"]["backwards"]["table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["eco_plus"]["backwards"]["table"][car_number] = \
+                    (self.available["eco_plus"]["backwards"]["table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "У стола по ходу":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["eco_plus"]["forward"]["table"][car_number] = \
+                    (self.available["eco_plus"]["forward"]["table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["eco_plus"]["forward"]["table"][car_number] = \
+                    (self.available["eco_plus"]["forward"]["table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "Место пассажира с детьми":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["eco_plus"]["kids"]["seats"][car_number] = \
+                    (self.available["eco_plus"]["kids"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["eco_plus"]["kids"]["seats"][car_number] = \
+                    (self.available["eco_plus"]["kids"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "Место для матери и ребенка":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["eco_plus"]["babies"]["seats"][car_number] = \
+                    (self.available["eco_plus"]["babies"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["eco_plus"]["babies"]["seats"][car_number] = \
+                    (self.available["eco_plus"]["babies"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+    def update_eco_seats(self, car_number, seat):
+
+        seat_type = seat["label"].replace(",", "")
+        free_seats = parse_places(seat["places"]) if "-" in seat["places"] else seat["places"].split(",")
+        price = int(seat["tariff"])
+        price_non_refundable = seat["tariff2"]
+
+        if seat_type == "Не у стола против хода":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["eco"]["backwards"]["no_table"][car_number] = \
+                    (self.available["eco"]["backwards"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["eco"]["backwards"]["no_table"][car_number] = \
+                    (self.available["eco"]["backwards"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "Не у стола по ходу":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["eco"]["forward"]["no_table"][car_number] = \
+                    (self.available["eco"]["forward"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["eco"]["forward"]["no_table"][car_number] = \
+                    (self.available["eco"]["forward"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "У стола против хода":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["eco"]["backwards"]["table"][car_number] = \
+                    (self.available["eco"]["backwards"]["table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["eco"]["backwards"]["table"][car_number] = \
+                    (self.available["eco"]["backwards"]["table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "У стола по ходу":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["eco"]["forward"]["table"][car_number] = \
+                    (self.available["eco"]["forward"]["table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["eco"]["forward"]["table"][car_number] = \
+                    (self.available["eco"]["forward"]["table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "Без окна против хода":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["eco"]["backwards"]["no_window"][car_number] = \
+                    (self.available["eco"]["backwards"]["no_window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["eco"]["backwards"]["no_window"][car_number] = \
+                    (self.available["eco"]["backwards"]["no_window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "Без окна по ходу":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["eco"]["forward"]["no_window"][car_number] = \
+                    (self.available["eco"]["forward"]["no_window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["eco"]["forward"]["no_window"][car_number] = \
+                    (self.available["eco"]["forward"]["no_window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "Место для проезда с мелким домашним животным":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["eco"]["pets"]["seats"][car_number] = \
+                    (self.available["eco"]["pets"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["eco"]["pets"]["seats"][car_number] = \
+                    (self.available["eco"]["pets"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "Место для инвалида":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["eco"]["disabled"]["seats"][car_number] = \
+                    (self.available["eco"]["disabled"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["eco"]["disabled"]["seats"][car_number] = \
+                    (self.available["eco"]["disabled"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+    def update_base_seats(self, car_number, seat):
+
+        seat_type = seat["label"].replace(",", "")
+        free_seats = parse_places(seat["places"]) if "-" in seat["places"] else seat["places"].split(",")
+        price = int(seat["tariff"])
+        price_non_refundable = seat["tariff2"]
+
+        if seat_type == "Не у стола против хода":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["base"]["backwards"]["no_table"][car_number] = \
+                    (self.available["base"]["backwards"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["base"]["backwards"]["no_table"][car_number] = \
+                    (self.available["base"]["backwards"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "Не у стола по ходу":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["base"]["forward"]["no_table"][car_number] = \
+                    (self.available["base"]["forward"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["base"]["forward"]["no_table"][car_number] = \
+                    (self.available["base"]["forward"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "У стола против хода":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["base"]["backwards"]["table"][car_number] = \
+                    (self.available["base"]["backwards"]["table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["base"]["backwards"]["table"][car_number] = \
+                    (self.available["base"]["backwards"]["table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "У стола по ходу":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["base"]["forward"]["table"][car_number] = \
+                    (self.available["base"]["forward"]["table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["base"]["forward"]["table"][car_number] = \
+                    (self.available["base"]["forward"]["table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "Без окна против хода":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["base"]["backwards"]["no_window"][car_number] = \
+                    (self.available["base"]["backwards"]["no_window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["base"]["backwards"]["no_window"][car_number] = \
+                    (self.available["base"]["backwards"]["no_window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "Без окна по ходу":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["base"]["forward"]["no_window"][car_number] = \
+                    (self.available["base"]["forward"]["no_window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["base"]["forward"]["no_window"][car_number] = \
+                    (self.available["base"]["forward"]["no_window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+    def get_available_seats(self, data=None):
+
+        if data is None:
+            data = self.available
+
+        if isinstance(data, dict):
+            total = 0
+            for key, value in data.items():
+                if key == "total":
+                    continue
+                if isinstance(value, dict):
+                    # Рекурсивный вызов метода update_totals
+                    self.get_available_seats(value)
+                    total += value.get("total", 0)
+                elif isinstance(value, list):
+                    total += len(value)
+            data["total"] = total
+
+        return self.available
+
+class Lasto4kaSeatsCounter:
+    def __init__(self, data):
+        self.data = data
+        self.available = {
+            "business_class": self.init_business_class_data(),
+            "eco": self.init_eco_data(),
+            "base": self.init_base_data(),
+        }
+
+    def init_business_class_data(self):
+        return {
+            "total": 0,
+            "forward": {"total": 0, "no_table": {}, "table": {}, "no_window": {}, "window": {}},
+            "backwards": {"total": 0, "no_table": {}, "table": {}, "no_window": {}, "window": {}},
+            "regular": {"total": 0, "seats": {}},
+            "window": {"total": 0, "seats": {}},
+            "table": {"total": 0, "seats": {}},
+        }
+
+    def init_eco_data(self):
+        return {
+            "total": 0,
+            "forward": {"total": 0, "no_table": {}, "no_window": {}, "window": {}},
+            "backwards": {"total": 0, "no_table": {}, "no_window": {}, "window": {}},
+            "regular": {"total": 0, "seats": {}},
+            "window": {"total": 0, "seats": {}},
+            "no_window": {"total": 0, "seats": {}},
+            "pets": {"total": 0, "seats": {}},
+        }
+
+    def init_base_data(self):
+        return {
+            "total": 0,
+            "forward": {"total": 0, "no_table": {}, "table": {}, "no_window": {}, "window": {}},
+            "backwards": {"total": 0, "no_table": {}, "table": {}, "no_window": {}, "window": {}},
+            "regular": {"total": 0, "seats": {}},
+            "window": {"total": 0, "seats": {}},
+            "no_window": {"total": 0, "seats": {}},
+            "disabled": {"total": 0, "seats": {}},
+        }
+
+    def count_seats(self):
+
+        for car in self.data["result"]["lst"][0]["cars"]:
+
+            car_number = int(car["cnumber"])
+            car_type = car["catLabelLoc"]
+
+            if car_type == "Бизнес класс":
+
+                for seat in car["seats"]:
+                    self.update_business_class_seats(car_number, seat)
+
+            elif car_type == "Эконом":
+
+                for seat in car["seats"]:
+                    self.update_eco_seats(car_number, seat)
+
+            elif car_type == "Базовый":
+
+                for seat in car["seats"]:
+                    self.update_base_seats(car_number, seat)
+
+    def update_business_class_seats(self, car_number, seat):
+
+        seat_type = seat["label"].replace(",", "").replace(",", "")
+        free_seats = parse_places(seat["places"]) if "-" in seat["places"] else seat["places"].split(",")
+        price = int(seat["tariff"])
+        price_non_refundable = seat["tariff2"]
+
+        if seat_type == "Не у стола против хода":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["business_class"]["backwards"]["no_table"][car_number] = \
+                    (self.available["business_class"]["backwards"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["business_class"]["backwards"]["no_table"][car_number] = \
+                    (self.available["business_class"]["backwards"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "Не у стола по ходу":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["business_class"]["forward"]["no_table"][car_number] = \
+                    (self.available["business_class"]["forward"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["business_class"]["forward"]["no_table"][car_number] = \
+                    (self.available["business_class"]["forward"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "У стола против хода":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["business_class"]["backwards"]["table"][car_number] = \
+                    (self.available["business_class"]["backwards"]["table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["business_class"]["backwards"]["table"][car_number] = \
+                    (self.available["business_class"]["backwards"]["table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "У стола по ходу":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["business_class"]["forward"]["table"][car_number] = \
+                    (self.available["business_class"]["forward"]["table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["business_class"]["forward"]["table"][car_number] = \
+                    (self.available["business_class"]["forward"]["table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "Без окна против хода":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["business_class"]["backwards"]["no_window"][car_number] = \
+                    (self.available["business_class"]["backwards"]["no_window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["business_class"]["backwards"]["no_window"][car_number] = \
+                    (self.available["business_class"]["backwards"]["no_window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "Без окна по ходу":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["business_class"]["forward"]["no_window"][car_number] = \
+                    (self.available["business_class"]["forward"]["no_window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["business_class"]["forward"]["no_window"][car_number] = \
+                    (self.available["business_class"]["forward"]["no_window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "У окна против хода":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["business_class"]["backwards"]["window"][car_number] = \
+                    (self.available["business_class"]["backwards"]["window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["business_class"]["backwards"]["window"][car_number] = \
+                    (self.available["business_class"]["backwards"]["window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "У окна по ходу":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["business_class"]["forward"]["window"][car_number] = \
+                    (self.available["business_class"]["forward"]["window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["business_class"]["forward"]["window"][car_number] = \
+                    (self.available["business_class"]["forward"]["window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "У стола":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["business_class"]["table"]["seats"][car_number] = \
+                    (self.available["business_class"]["table"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["business_class"]["table"]["seats"][car_number] = \
+                    (self.available["business_class"]["table"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "У окна":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["business_class"]["window"]["seats"][car_number] = \
+                    (self.available["business_class"]["window"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["business_class"]["window"]["seats"][car_number] = \
+                    (self.available["business_class"]["window"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "Обычное":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["business_class"]["regular"]["seats"][car_number] = \
+                    (self.available["business_class"]["regular"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["business_class"]["regular"]["seats"][car_number] = \
+                    (self.available["business_class"]["regular"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+    def update_eco_seats(self, car_number, seat):
+
+        seat_type = seat["label"].replace(",", "")
+        free_seats = parse_places(seat["places"]) if "-" in seat["places"] else seat["places"].split(",")
+        price = int(seat["tariff"])
+        price_non_refundable = seat["tariff2"]
+
+        if seat_type == "Не у стола против хода":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["eco"]["backwards"]["no_table"][car_number] = \
+                    (self.available["eco"]["backwards"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["eco"]["backwards"]["no_table"][car_number] = \
+                    (self.available["eco"]["backwards"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "Не у стола по ходу":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["eco"]["forward"]["no_table"][car_number] = \
+                    (self.available["eco"]["forward"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["eco"]["forward"]["no_table"][car_number] = \
+                    (self.available["eco"]["forward"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "Без окна против хода":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["eco"]["backwards"]["no_window"][car_number] = \
+                    (self.available["eco"]["backwards"]["no_window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["eco"]["backwards"]["no_window"][car_number] = \
+                    (self.available["eco"]["backwards"]["no_window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "Без окна по ходу":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["eco"]["forward"]["no_window"][car_number] = \
+                    (self.available["eco"]["forward"]["no_window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["eco"]["forward"]["no_window"][car_number] = \
+                    (self.available["eco"]["forward"]["no_window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+                
+        elif seat_type == "У окна против хода":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["eco"]["backwards"]["window"][car_number] = \
+                    (self.available["eco"]["backwards"]["window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["eco"]["backwards"]["window"][car_number] = \
+                    (self.available["eco"]["backwards"]["window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "У окна по ходу":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["eco"]["forward"]["window"][car_number] = \
+                    (self.available["eco"]["forward"]["window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["eco"]["forward"]["window"][car_number] = \
+                    (self.available["eco"]["forward"]["window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "Место для проезда с мелким домашним животным":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["eco"]["pets"]["seats"][car_number] = \
+                    (self.available["eco"]["pets"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["eco"]["pets"]["seats"][car_number] = \
+                    (self.available["eco"]["pets"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "Без окна":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["eco"]["no_window"]["seats"][car_number] = \
+                    (self.available["eco"]["no_window"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["eco"]["no_window"]["seats"][car_number] = \
+                    (self.available["eco"]["no_window"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "У окна":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["eco"]["window"]["seats"][car_number] = \
+                    (self.available["eco"]["window"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["eco"]["window"]["seats"][car_number] = \
+                    (self.available["eco"]["window"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "Обычное":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["eco"]["regular"]["seats"][car_number] = \
+                    (self.available["eco"]["regular"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["eco"]["regular"]["seats"][car_number] = \
+                    (self.available["eco"]["regular"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+    def update_base_seats(self, car_number, seat):
+
+        seat_type = seat["label"].replace(",", "")
+        free_seats = parse_places(seat["places"]) if "-" in seat["places"] else seat["places"].split(",")
+        price = int(seat["tariff"])
+        price_non_refundable = seat["tariff2"]
+
+        if seat_type == "Не у стола против хода":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["base"]["backwards"]["no_table"][car_number] = \
+                    (self.available["base"]["backwards"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["base"]["backwards"]["no_table"][car_number] = \
+                    (self.available["base"]["backwards"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "Не у стола по ходу":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["base"]["forward"]["no_table"][car_number] = \
+                    (self.available["base"]["forward"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["base"]["forward"]["no_table"][car_number] = \
+                    (self.available["base"]["forward"]["no_table"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "Без окна против хода":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["base"]["backwards"]["no_window"][car_number] = \
+                    (self.available["base"]["backwards"]["no_window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["base"]["backwards"]["no_window"][car_number] = \
+                    (self.available["base"]["backwards"]["no_window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "Без окна по ходу":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["base"]["forward"]["no_window"][car_number] = \
+                    (self.available["base"]["forward"]["no_window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["base"]["forward"]["no_window"][car_number] = \
+                    (self.available["base"]["forward"]["no_window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "У окна против хода":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["base"]["backwards"]["window"][car_number] = \
+                    (self.available["base"]["backwards"]["window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["base"]["backwards"]["window"][car_number] = \
+                    (self.available["base"]["backwards"]["window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "У окна по ходу":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["base"]["forward"]["window"][car_number] = \
+                    (self.available["base"]["forward"]["window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["base"]["forward"]["window"][car_number] = \
+                    (self.available["base"]["forward"]["window"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "Место для инвалида":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["base"]["disabled"]["seats"][car_number] = \
+                    (self.available["base"]["disabled"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["base"]["disabled"]["seats"][car_number] = \
+                    (self.available["base"]["disabled"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "Без окна":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["base"]["no_window"]["seats"][car_number] = \
+                    (self.available["base"]["no_window"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["base"]["no_window"]["seats"][car_number] = \
+                    (self.available["base"]["no_window"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "У окна":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["base"]["window"]["seats"][car_number] = \
+                    (self.available["base"]["window"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["base"]["window"]["seats"][car_number] = \
+                    (self.available["base"]["window"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
+        elif seat_type == "Обычное":
+
+            if price_non_refundable is not None:
+
+                price_non_refundable = int(price_non_refundable)
+                price, price_non_refundable = max([price, price_non_refundable]), min([price, price_non_refundable])
+
+                self.available["base"]["regular"]["seats"][car_number] = \
+                    (self.available["base"]["regular"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price, price_non_refundable) for place_num in free_seats])
+
+            else:
+
+                self.available["base"]["regular"]["seats"][car_number] = \
+                    (self.available["base"]["regular"]["seats"].get(car_number, []) +
+                     [(place_num.lstrip("0"), price) for place_num in free_seats])
+
     def get_available_seats(self, data=None):
 
         if data is None:
