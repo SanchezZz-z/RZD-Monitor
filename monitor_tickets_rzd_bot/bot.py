@@ -7,8 +7,8 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.storage.redis import RedisStorage, DefaultKeyBuilder
 
-from db_connection import database_connection
-from monitor import monitor
+from monitor_tickets_rzd_bot.db_connection import database_connection
+from monitor_tickets_rzd_bot.monitor import monitor
 from tgbot.config import load_config, Config
 from tgbot.handlers import routers_list
 from tgbot.middlewares.config import ConfigMiddleware

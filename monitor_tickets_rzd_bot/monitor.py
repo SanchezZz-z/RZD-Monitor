@@ -1,7 +1,7 @@
 import json
 import asyncio
 
-from db_connection import database_connection
+from monitor_tickets_rzd_bot.db_connection import database_connection
 from monitor_setup import generate_user_messages, generate_sapsan_user_messages, generate_lastochka_user_messages
 from rzd_app import get_seats
 from testing import delete_successful_monitor_task
