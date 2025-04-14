@@ -1,6 +1,6 @@
 import re
 from collections import defaultdict
-from const import *
+from monitor_tickets_rzd_bot.const import *
 
 
 def generate_paths(monitor_setup):

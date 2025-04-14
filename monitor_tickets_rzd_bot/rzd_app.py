@@ -8,9 +8,8 @@ import string
 import random
 import urllib3
 
-from monitor_setup import generate_user_messages
 from monitor_tickets_rzd_bot.seats_counter_new import remove_non_digits
-from seats_counter_new import TrainSeatsCounter, Lasto4kaSeatsCounter, SapsanSeatsCounter
+from monitor_tickets_rzd_bot.seats_counter_new import TrainSeatsCounter, Lasto4kaSeatsCounter, SapsanSeatsCounter
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -374,9 +373,24 @@ async def get_seats(origin_station, destination_station, date, train):
 
         data_res = await get_info_with_rid(rid, hashcode, url)
 
-        while "lst" not in data_res["result"].keys():
-            moscow_spb_rid = data_res["result"]["rid"]
-            data_res = await get_info_with_rid(moscow_spb_rid, hashcode, url)
+        # Если на некоторые поезда (Ласточки и Сапсаны) вообще нет мест, то API возвращает ошибку 1093 с сообщением
+        if data_res.get("errorCode") == 1093 and data_res.get("errorMessage", "").startswith("Мест нет"):
+            return 0
+
+        try:
+            while data_res.get("result") is None or "lst" not in data_res["result"].keys():
+                moscow_spb_rid = data_res["result"]["rid"]
+                data_res = await get_info_with_rid(moscow_spb_rid, hashcode, url)
+
+                # Проверяем ошибку внутри цикла
+                if data_res.get("errorCode") == 1093 and data_res.get("errorMessage", "").startswith("Мест нет"):
+                    return 0
+
+        except AttributeError as e:
+
+            print("AttributeError occurred: {}, data_res: {}".format(e, data_res))
+            # Можно вернуть 0 или другое значение по умолчанию
+            return 0
 
     # Считаем места
 
@@ -406,10 +420,10 @@ async def get_seats(origin_station, destination_station, date, train):
 # print(json.dumps(s, indent=4, ensure_ascii=False))
 
 # import json
-# train_number = "020С"
-# origin_station = "2000003"
-# destination_station = "2064570"
-# departure_date = "02.07.2025"
+# train_number = "740\u042f"
+# origin_station = "2000000"
+# destination_station = "2010050"
+# departure_date = "18.04.2025"
 # print(json.dumps(get_seats(origin_station, destination_station, departure_date, train_number)["coupe"], indent=4,
 #                  ensure_ascii=False))
 

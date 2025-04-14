@@ -1570,12 +1570,17 @@ async def confirm_monitor_setup_success(callback_query: CallbackQuery, state: FS
 
         try:
 
+            text = None
+
             # Запрос на получение мест в выбранном поезде
             seats_data = await get_seats(user_data["origin_station"], user_data["destination_station"],
                                          user_data["trip_date"].strftime("%d.%m.%Y"), user_data["train_num"])
 
-            # Оставляем только места, которые подходят под настройку монитора пользователя
-            text = generate_sapsan_user_messages(monitor_setup, seats_data)
+            # Если места нашлись или же запрос на проверку мест выполнился без ошибок (Мест нет), тогда составляем сообщение
+
+            if seats_data:
+                # Оставляем только места, которые подходят под настройку монитора пользователя
+                text = generate_sapsan_user_messages(monitor_setup, seats_data)
 
             # Полностью чистим сохраненные данные, состояние сохраняем
             await state.set_data({})
@@ -1632,12 +1637,18 @@ async def confirm_monitor_setup_success(callback_query: CallbackQuery, state: FS
 
         try:
 
+            text = None
+
             # Запрос на получение мест в выбранном поезде
             seats_data = await get_seats(user_data["origin_station"], user_data["destination_station"],
                                          user_data["trip_date"].strftime("%d.%m.%Y"), user_data["train_num"])
 
-            # Оставляем только места, которые подходят под настройку монитора пользователя
-            text = generate_lastochka_user_messages(monitor_setup, seats_data)
+            # Если места нашлись или же запрос на проверку мест выполнился без ошибок, тогда составляем сообщение
+
+            if seats_data:
+
+                # Оставляем только места, которые подходят под настройку монитора пользователя
+                text = generate_lastochka_user_messages(monitor_setup, seats_data)
 
             # Полностью чистим сохраненные данные, состояние сохраняем
             await state.set_data({})
