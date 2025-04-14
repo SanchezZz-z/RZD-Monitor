@@ -45,37 +45,43 @@ async def monitor(bot):
                 for train_id, to_do_task in to_do_tasks.items():
                     try:
                         train_data = await to_do_task
-                        trains_data_dict[train_id] = train_data
 
-                        if train_id in monitor_tasks_dict:
-                            for completed_task in monitor_tasks_dict[train_id]:
-                                if "first_class" in train_data: # Первый класс есть только в Сапсане
-                                    text = generate_sapsan_user_messages(json.loads(completed_task["monitor_setup"]), train_data)
-                                elif "plaz" in train_data: # Плацкарт есть только в обычных поездах
-                                    text = generate_user_messages(json.loads(completed_task["monitor_setup"]), train_data)
-                                else: # Остаются Ласточки
-                                    text = generate_lastochka_user_messages(json.loads(completed_task["monitor_setup"]), train_data)
-                                # Если места нашлись, то отправляем пользователю сообщение и удаляем таск
-                                if text:
-                                    message_header = ("\U00002757\U00002757\U00002757 <b><u>НАЙДЕНЫ БИЛЕТЫ</u></b> "
-                                                      "\U00002757\U00002757\U00002757\n\n")
-                                    train_info = "".join(completed_task["monitor_setup_info"].split("\n\n")[0]) + "\n\n"
-                                    monitor_deleted_msg_header = ("Сработавший монитор удален\nЕсли Вы не успели "
-                                                                  "купить билет, нажмите на кнопку 'Восстановить "
-                                                                  "монитор' под этим сообщением\n\n")
-                                    monitor_deleted_settings_msg = "\U0001F6E0 Настройки монитора:\n\n"
-                                    # Отправляем сообщение, что сработавший монитор удален
-                                    await bot.send_message(text=monitor_deleted_msg_header +
-                                                           monitor_deleted_settings_msg +
-                                                           completed_task["monitor_setup_info"],
-                                                           chat_id=completed_task["user_id"],
-                                                           reply_markup=restore_monitor_task_inline_keyboard(
-                                                               completed_task["id"], completed_task["train_id"]))
-                                    # Отправляем сообщение с информацией о найденных билетах
-                                    await bot.send_message(text=message_header + train_info + text,
-                                                           chat_id=completed_task["user_id"])
-                                    # Удаляем монитор
-                                    await delete_successful_monitor_task(connection_pool, completed_task["id"])
+                        # На запрос на Ласточку или Сапсан с полностью распроданными билетами API возвращает ошибку
+                        # Мест нет с кодом 1093, тогда get_seats возвращает 0
+
+                        if train_data:
+
+                            trains_data_dict[train_id] = train_data
+
+                            if train_id in monitor_tasks_dict:
+                                for completed_task in monitor_tasks_dict[train_id]:
+                                    if "first_class" in train_data: # Первый класс есть только в Сапсане
+                                        text = generate_sapsan_user_messages(json.loads(completed_task["monitor_setup"]), train_data)
+                                    elif "plaz" in train_data: # Плацкарт есть только в обычных поездах
+                                        text = generate_user_messages(json.loads(completed_task["monitor_setup"]), train_data)
+                                    else: # Остаются Ласточки
+                                        text = generate_lastochka_user_messages(json.loads(completed_task["monitor_setup"]), train_data)
+                                    # Если места нашлись, то отправляем пользователю сообщение и удаляем таск
+                                    if text:
+                                        message_header = ("\U00002757\U00002757\U00002757 <b><u>НАЙДЕНЫ БИЛЕТЫ</u></b> "
+                                                          "\U00002757\U00002757\U00002757\n\n")
+                                        train_info = "".join(completed_task["monitor_setup_info"].split("\n\n")[0]) + "\n\n"
+                                        monitor_deleted_msg_header = ("Сработавший монитор удален\nЕсли Вы не успели "
+                                                                      "купить билет, нажмите на кнопку 'Восстановить "
+                                                                      "монитор' под этим сообщением\n\n")
+                                        monitor_deleted_settings_msg = "\U0001F6E0 Настройки монитора:\n\n"
+                                        # Отправляем сообщение, что сработавший монитор удален
+                                        await bot.send_message(text=monitor_deleted_msg_header +
+                                                               monitor_deleted_settings_msg +
+                                                               completed_task["monitor_setup_info"],
+                                                               chat_id=completed_task["user_id"],
+                                                               reply_markup=restore_monitor_task_inline_keyboard(
+                                                                   completed_task["id"], completed_task["train_id"]))
+                                        # Отправляем сообщение с информацией о найденных билетах
+                                        await bot.send_message(text=message_header + train_info + text,
+                                                               chat_id=completed_task["user_id"])
+                                        # Удаляем монитор
+                                        await delete_successful_monitor_task(connection_pool, completed_task["id"])
 
                     except Exception as e:
                         print("При получении информации о поезде возникла ошибка: {}".format(e))
