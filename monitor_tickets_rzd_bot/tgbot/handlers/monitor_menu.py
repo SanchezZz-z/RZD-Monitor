@@ -1705,11 +1705,13 @@ async def restore_monitor(callback_query: CallbackQuery, callback_data: RestoreM
     train_data = await quick_restore_task_check(connection_pool, callback_data.train_id)
     # Если можно, то проверяем, есть ли места
     if train_data:
+        text = None
         await callback_query.message.edit_text("Проверка наличия мест, пожалуйста, подождите")
         seats_data = await get_seats(train_data[0]["origin_station"], train_data[0]["destination_station"],
                                      train_data[0]["trip_date"].strftime("%d.%m.%Y"), train_data[0]["train_num"])
         task_setup = await quick_restore_task_setup(connection_pool, callback_data.task_id)
-        text = generate_user_messages(task_setup, seats_data)
+        if seats_data:
+            text = generate_user_messages(task_setup, seats_data)
         # Если мест нет, тогда восстанавливаем монитор
         if not text:
             success_msg = await quick_restore_task(connection_pool, callback_data.task_id, callback_data.train_id)
