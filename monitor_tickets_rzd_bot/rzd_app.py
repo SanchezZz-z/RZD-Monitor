@@ -9,12 +9,44 @@ import random
 import urllib3
 
 from monitor_setup import generate_user_messages
+from monitor_tickets_rzd_bot.seats_counter_new import remove_non_digits
 from seats_counter_new import TrainSeatsCounter, Lasto4kaSeatsCounter, SapsanSeatsCounter
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Явно зададим русскую локаль, чтобы дни недели в функции get_train печатались на русском языке
 locale.setlocale(locale.LC_TIME, "ru_RU.UTF-8")
+
+# Функция для определения бренда поезда вручную по номеру поезда и его маршруту
+# Это необходимо так как в случаях, когда билеты на Сапсан и Ласточку полностью распроданы, API возвращает такие поезда
+# с пустым полем brand и они попадают в обычные (Скорые и пассажирские) поезда
+
+# 701-746 и 801-846 это Ласточки
+# 747 и 748 + МСК - СПб это Невский Экспресс
+# 741 - 744 + МСК - СПб это Аврора
+# 751 - 785 (мб и больше) + МСК - СПб это Сапсаны
+
+# 2006004 - Москва Октябрьская (Ленинградский Вокзал)
+# 2004001 - Санкт-Петербург-Главн. (Московский Вокзал)
+
+def train_brand_manual(train_data):
+    train_num = int(remove_non_digits(train_data["number"]))        # Номер поезда
+    train_route_start = int(train_data["code0"])                    # Код станции отправления (начальная станция поезда, а не станция отправления пользователя)
+    train_route_end = int(train_data["code1"])                      # Код станции прибытия (конечной станции поезда)
+    if train_num in range(701, 747) or train_num in range(801, 847):
+        if (((train_route_start == 2006004 and train_route_end == 2004001) or
+             (train_route_start == 2004001 and train_route_end == 2006004)) and train_num in range(741, 745)):
+            return "Аврора"
+        else:
+            return "Ласточка"
+    elif (((train_route_start == 2006004 and train_route_end == 2004001) or
+             (train_route_start == 2004001 and train_route_end == 2006004)) and train_num in [747, 748]):
+        return "Невский экспресс"
+    elif (((train_route_start == 2006004 and train_route_end == 2004001) or
+             (train_route_start == 2004001 and train_route_end == 2006004)) and train_num in range(751, 791)):
+        return "Сапсан"
+    else:
+        return "Скорые и пассажирские"
 
 
 # Функция для "красивого" формата даты
@@ -172,11 +204,11 @@ async def get_train(origin, destination, date):
         # есть параметр subt, равный 1, который отсутствует у поездов дальнего следования)
         if departure_date > time_check and "subt" not in train_info:
 
-            # Определяем бренд поезда
-            brand = train_info["brand"].lower()
-            if "ласточка" in brand:
+            # Определяем бренд поезда вручную (причина выше в начале скрипта)
+            brand = train_brand_manual(train_info)
+            if brand == "Ласточка":
                 category = "Ласточка"
-            elif "сапсан" in brand:
+            elif brand == "Сапсан":
                 category = "Сапсан"
             else:
                 category = "Скорые и пассажирские"
@@ -361,7 +393,7 @@ async def get_seats(origin_station, destination_station, date, train):
     return available_seats
 
 
-# s = asyncio.run(get_train("2000000", "2004000", "26.04.2025"))
+# s = asyncio.run(get_train("2000000", "2010050", "18.04.2025"))
 # s = asyncio.run(get_train("2004000", "2064570", "26.05.2024"))
 # print([key for key in s[0].keys() if len(s[0][key]) > 0])
 # for key in s[0].keys():
