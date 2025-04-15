@@ -243,23 +243,31 @@ async def quick_restore_task_check(pool, train_id):
             # можно. Если train_id в таблицах нет, значит поезд уже отправился и восстановить монитор нельзя
             trains_to_monitor_query = (
                 "SELECT "
-                "   origin_station, "
-                "   destination_station, "
-                "   trip_date, "
-                "   train_num "
-                "FROM trains_to_monitor "
-                "WHERE id = $1;"
+                "   l.origin_station, "
+                "   l.destination_station, "
+                "   l.trip_date, "
+                "   l.train_num, "
+                "   r.train_type "
+                "FROM trains_to_monitor AS l"
+                "INNER JOIN user_trains AS r "
+                "ON l.train_num = r.train_num AND l.trip_date = r.trip_date "
+                "WHERE l.id = $1 "
+                "LIMIT 1;"
             )
             train_data = await connection.fetch(trains_to_monitor_query, train_id)
             if not train_data:
                 dropped_trains_to_monitor_query = (
                     "SELECT "
-                    "   origin_station, "
-                    "   destination_station, "
-                    "   trip_date, "
-                    "   train_num "
-                    "FROM dropped_trains_to_monitor "
-                    "WHERE id = $1;"
+                    "   l.origin_station, "
+                    "   l.destination_station, "
+                    "   l.trip_date, "
+                    "   l.train_num, "
+                    "   r.train_type "
+                    "FROM trains_to_monitor AS l"
+                    "INNER JOIN dropped_trains_to_monitor AS r "
+                    "ON l.train_num = r.train_num AND l.trip_date = r.trip_date "
+                    "WHERE l.id = $1 "
+                    "LIMIT 1;"
                 )
                 train_data = await connection.fetch(dropped_trains_to_monitor_query, train_id)
 
