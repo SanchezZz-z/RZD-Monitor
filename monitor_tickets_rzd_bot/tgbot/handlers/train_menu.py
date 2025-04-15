@@ -10,7 +10,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from monitor_tickets_rzd_bot.db_connection import database_connection
 from monitor_tickets_rzd_bot.rzd_app import get_train
-from monitor_tickets_rzd_bot.testing import find_matches, load_stations, add_user_train, get_user_trains, delete_selected_trains, \
+from monitor_tickets_rzd_bot.testing import find_matches, add_user_train, get_user_trains, delete_selected_trains, \
     get_user_choice
 from ..calendar import SimpleCalendar, get_user_locale, SimpleCalendarCallback
 from monitor_tickets_rzd_bot.tgbot.keyboards.inline import confirm_station_inline_keyboard, StationOptionCallbackData, \
@@ -21,10 +21,6 @@ from ..keyboards.reply import confirm_train_reply_keyboard
 from monitor_tickets_rzd_bot.tgbot.misc.states import Train
 
 train_menu_router = Router()
-
-file_path = "stations v2.0.json"
-stations_data = load_stations(file_path)
-
 
 # 
 @train_menu_router.message(Train.main_menu, Command("trains"))
@@ -210,15 +206,25 @@ async def get_start_station(callback_query: CallbackQuery, state: FSMContext):
 async def select_station(message: types.Message, state: FSMContext):
     user_input = message.text
 
+    connection_pool = await database_connection.get_connection_pool()
+
     # Сохраним сообщение, чтобы потом избежать ошибки при вызове календаря
     await state.update_data(message_for_calendar=message)
 
-    matches = find_matches(user_input, stations_data, threshold=30, limit=10)
-    station_options = ["{} - ".format(n + 1) + matches[n][0] + "\n" for n in range(len(matches))]
-    placeholders = ("{}" * len(station_options)).format(*station_options)
+    matches = await find_matches(user_input, connection_pool, threshold=0.2, limit=10)
+    if not matches:
+        await message.answer("Не найдено станций по вашему запросу. Попробуйте ещё раз.")
+        return
+
+    station_options = ["{} - {}".format(n + 1, match[0]) for n, match in enumerate(matches)]
+    response = "\n".join(station_options)
+
+    # matches = find_matches(user_input, stations_data, threshold=30, limit=10)
+    # station_options = ["{} - ".format(n + 1) + matches[n][0] + "\n" for n in range(len(matches))]
+    # placeholders = ("{}" * len(station_options)).format(*station_options)
     # Если выбираем станцию отправления
     if await state.get_state() == Train.train_menu_start:
-        await message.answer("Пожалуйста, выберите станцию отправления из списка:\n\n" + placeholders +
+        await message.answer("Пожалуйста, выберите станцию отправления из списка:\n\n" + response +
                              "\nЕсли станции нет в списке, убедитесь, что правильно ввели название",
                              reply_markup=confirm_station_inline_keyboard(station_options))
         await state.set_state(Train.confirm_start)
@@ -226,7 +232,7 @@ async def select_station(message: types.Message, state: FSMContext):
         await state.update_data(start_station_options=matches)
     # Если выбираем станцию назначения
     elif await state.get_state() == Train.select_destination:
-        await message.answer("Пожалуйста, выберите станцию назначения из списка:\n\n" + placeholders +
+        await message.answer("Пожалуйста, выберите станцию назначения из списка:\n\n" + response +
                              "\nЕсли станции нет в списке, убедитесь, что правильно ввели название",
                              reply_markup=confirm_station_inline_keyboard(station_options))
         await state.set_state(Train.confirm_destination)

@@ -4,29 +4,53 @@ from collections import OrderedDict
 from datetime import datetime
 
 from aiogram import types
-from fuzzywuzzy import process
 import asyncpg
 
 
-# Функция для считывания станций и их кодов
-def load_stations(file_path):
-    with open(file_path, "r", encoding="utf-8") as f:
-        stations = json.load(f)
-    return stations
+async def find_matches(user_input, pool, threshold=0.2, limit=10):
+    
+    async with pool.acquire() as conn:
 
+        # Устанавливаем порог явно
+        await conn.execute("SET pg_trgm.similarity_threshold = {}".format(threshold))
+        
+        # Сначала ищем полные совпадения, но допускаем небольшие опечатки
 
-# Функция для поиска ближайших совпадений станций с запросом пользователя
-def find_matches(user_input, station_data, threshold=70, limit=10):
-    station_names = [station["name"] for station in station_data]
-    # Проверка точного совпадения по началу строки
-    exact_matches = [station for station in station_names if station.lower().startswith(user_input.lower())]
-    if exact_matches:
-        return [(match, station_data[station_names.index(match)]["expressCode"]) for match in exact_matches][:limit]
-    # Использование алгоритма сравнения строк для поиска ближайших совпадений
-    matches = process.extract(user_input, station_names, limit=limit)
-    closest_matches = [(match[0], station_data[station_names.index(match[0])]["expressCode"]) for match in matches if
-                       match[1] >= threshold]
-    return closest_matches
+        exact_query = """
+            SELECT name, express_code, similarity(name, $1) AS sim
+            FROM stations
+            WHERE name % $1
+            AND LOWER(name) ILIKE LOWER($2)
+            ORDER BY express_code
+            LIMIT $3
+            """
+        like_pattern = "{}%".format(user_input)
+        exact_matches = await conn.fetch(exact_query, user_input, like_pattern, limit)
+
+        # Если есть подходящие совпадения, возвращаем их
+
+        if exact_matches:
+            return [(match["name"], match["express_code"]) for match in exact_matches]
+
+        # Если полных совпадений нет, тогда ищем ближайшие
+
+        fuzzy_query = """
+            SELECT name, express_code, similarity(name, $1) AS sim
+            FROM stations
+            WHERE name % $1
+            ORDER BY express_code
+            LIMIT $2
+        """
+        fuzzy_matches = await conn.fetch(fuzzy_query, user_input, limit)
+
+        # Фильтруем по порогу схожести
+        filtered_matches = [
+            (match["name"], match["express_code"])
+            for match in fuzzy_matches
+            if match["sim"] >= threshold
+        ]
+
+        return filtered_matches[:limit]
 
 
 # Функция для получения из общего списка поездов / мониторов, которые выбрал пользователь
