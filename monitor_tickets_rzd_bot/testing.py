@@ -326,7 +326,8 @@ async def quick_restore_task(pool, task_id, train_id):
                 "   monitor_setup, "
                 "   monitor_setup_info "
                 "FROM successful_monitor_tasks "
-                "WHERE id = $1;"
+                "WHERE id = $1 "
+                "LIMIT 1;"
             )
             await connection.execute(task_restore_query, task_id)
             # И поезд, если он был перенесен в dropped_trains_to_monitor
