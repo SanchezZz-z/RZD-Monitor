@@ -348,6 +348,8 @@ async def get_train(origin, destination, date):
 
 
 async def get_seats(origin_station, destination_station, date, train):
+
+    device_guid = device_guid_gen()
     hashcode = hash_code_gen()
 
     # Готовим запрос на получение информации по свободным местам в нужном поезде.
@@ -367,12 +369,16 @@ async def get_seats(origin_station, destination_station, date, train):
                 "code1": "{}".format(destination_station),
                 "dt0": "{}".format(date),
                 "tnum0": "{}".format(train),
+                "deviceGuid": "{}".format(device_guid),
+                "platform": "IOS",
+                "version": "1.47.2(2367)",
                 "hashCode": "{}".format(hashcode),
                 "protocolVersion": 47
                 }
 
     # Отправляем запрос
     async with httpx.AsyncClient(verify=False) as client:
+
         res = await client.post(url=url, headers=headers, json=data_req, timeout=10)
 
         if res.status_code != 200:  # АШИПКА
@@ -384,7 +390,7 @@ async def get_seats(origin_station, destination_station, date, train):
 
         # Второй запрос уже непосредственно на получение свободных мест в нужном поезде
 
-        data_res = await get_info_with_rid(rid, hashcode, url)
+        data_res = await get_info_with_rid(rid, device_guid, hashcode, url)
 
         # Если на некоторые поезда (Ласточки и Сапсаны) вообще нет мест, то API возвращает ошибку 1093 с сообщением
         if data_res.get("errorCode") == 1093 and data_res.get("errorMessage", "").startswith("Мест нет"):
@@ -393,7 +399,7 @@ async def get_seats(origin_station, destination_station, date, train):
         try:
             while data_res.get("result") is None or "lst" not in data_res["result"].keys():
                 moscow_spb_rid = data_res["result"]["rid"]
-                data_res = await get_info_with_rid(moscow_spb_rid, hashcode, url)
+                data_res = await get_info_with_rid(rid, device_guid, hashcode, url)
 
                 # Проверяем ошибку внутри цикла
                 if data_res.get("errorCode") == 1093 and data_res.get("errorMessage", "").startswith("Мест нет"):
@@ -436,7 +442,7 @@ async def get_seats(origin_station, destination_station, date, train):
 # train_number = "740\u042f"
 # origin_station = "2000000"
 # destination_station = "2010050"
-# departure_date = "18.04.2025"
+# departure_date = "18.06.2025"
 # print(json.dumps(get_seats(origin_station, destination_station, departure_date, train_number)["coupe"], indent=4,
 #                  ensure_ascii=False))
 
