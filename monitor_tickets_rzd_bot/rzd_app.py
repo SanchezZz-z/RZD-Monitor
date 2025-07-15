@@ -1,4 +1,5 @@
 import asyncio
+import json
 import locale
 from datetime import datetime
 import pytz
@@ -61,7 +62,11 @@ def hash_code_gen(size=40, chars=string.ascii_lowercase + string.digits):
     return "".join(random.choice(chars) for _ in range(size))
 
 
-async def get_info_with_rid(rid, hashcode, url):
+def device_guid_gen(size=32, chars=string.ascii_uppercase + string.digits):
+    return "".join(random.choice(chars) for _ in range(size))
+
+
+async def get_info_with_rid(rid, device_guid, hashcode, url):
     headers = {
         "Host": "ekmp-i-47-2.rzd.ru",
         "Content-Type": "application/json",
@@ -74,6 +79,9 @@ async def get_info_with_rid(rid, hashcode, url):
 
     data_req = {
         "rid": "{}".format(rid),
+        "deviceGuid": "{}".format(device_guid),
+        "platform": "IOS",
+	    "version": "1.47.2(2367)",
         "hashCode": "{}".format(hashcode),
         "protocolVersion": 47
     }
@@ -98,6 +106,7 @@ async def get_train(origin, destination, date):
     # Сперва напишем функцию, генерирующую случайный набор букв и цифр. Длина hashCode в любом запросе равна 40.
 
     hashcode = hash_code_gen()
+    device_guid = device_guid_gen()
 
     # Готовим запрос на получение информации по поездам в нужную дату.
 
@@ -107,25 +116,29 @@ async def get_train(origin, destination, date):
         "Host": "ekmp-i-47-2.rzd.ru",
         "Content-Type": "application/json",
         "User-Agent": "RZD/2367 CFNetwork/1568.300.101 Darwin/24.2.0",
-        "Sec-Fetch-Site": "same-origin",
         "Accept-Language": "ru",
         "Accept-Encoding": "gzip, deflate, br"
     }
 
-    data_req = {"code0": "{}".format(origin),
-                "code1": "{}".format(destination),
-                "dt0": "{}".format(date),
-                "timezone": "+0300",
-                "withoutSeats": "y",
-                "dir": 0,
-                "tfl": 3,
-                "responseVersion": 2,
-                "protocolVersion": 47,
-                "hashCode": "{}".format(hashcode)}
+    data_req = {
+        "dir": 0,
+        "language": "ru",
+        "deviceGuid": "{}".format(device_guid),
+        "code0": "{}".format(origin),
+        "code1": "{}".format(destination),
+        "dt0": "{}".format(date),
+        "platform": "IOS",
+        "version": "1.47.2(2367)",
+        "timezone": "+0300",
+        "tfl": 3,
+        "responseVersion": 2,
+        "protocolVersion": 47,
+        "hashCode": "{}".format(hashcode)
+    }
 
     # Отправляем запрос
     async with httpx.AsyncClient(verify=False) as client:
-        res = await client.post(url=url, headers=headers, json=data_req, timeout=10)
+        res = await client.post(url=url, headers=headers, content=json.dumps(data_req, ensure_ascii=False), timeout=10)
 
         if res.status_code != 200:
             print("Response Code: {}".format(res.status_code))
@@ -141,14 +154,14 @@ async def get_train(origin, destination, date):
         # столько запросов, сколько понадобится. Чтобы loop не завис навсегда, добавлено максимальное количество
         # попыток.
 
-        data_res = await get_info_with_rid(rid, hashcode, url)
+        data_res = await get_info_with_rid(rid, device_guid, hashcode, url)
 
         attempts = 0
 
         while "timetables" not in data_res["result"].keys() and attempts < 11:
             await asyncio.sleep(0.5)
             moscow_spb_rid = data_res["result"]["rid"]
-            data_res = await get_info_with_rid(moscow_spb_rid, hashcode, url)
+            data_res = await get_info_with_rid(rid, device_guid, hashcode, url)
             attempts += 1
 
     # Список с номерами поездов, которые возвращает API (эти номера отличаются от тех, которые показываются на сайте)
@@ -335,6 +348,8 @@ async def get_train(origin, destination, date):
 
 
 async def get_seats(origin_station, destination_station, date, train):
+
+    device_guid = device_guid_gen()
     hashcode = hash_code_gen()
 
     # Готовим запрос на получение информации по свободным местам в нужном поезде.
@@ -354,12 +369,16 @@ async def get_seats(origin_station, destination_station, date, train):
                 "code1": "{}".format(destination_station),
                 "dt0": "{}".format(date),
                 "tnum0": "{}".format(train),
+                "deviceGuid": "{}".format(device_guid),
+                "platform": "IOS",
+                "version": "1.47.2(2367)",
                 "hashCode": "{}".format(hashcode),
                 "protocolVersion": 47
                 }
 
     # Отправляем запрос
     async with httpx.AsyncClient(verify=False) as client:
+
         res = await client.post(url=url, headers=headers, json=data_req, timeout=10)
 
         if res.status_code != 200:  # АШИПКА
@@ -371,7 +390,7 @@ async def get_seats(origin_station, destination_station, date, train):
 
         # Второй запрос уже непосредственно на получение свободных мест в нужном поезде
 
-        data_res = await get_info_with_rid(rid, hashcode, url)
+        data_res = await get_info_with_rid(rid, device_guid, hashcode, url)
 
         # Если на некоторые поезда (Ласточки и Сапсаны) вообще нет мест, то API возвращает ошибку 1093 с сообщением
         if data_res.get("errorCode") == 1093 and data_res.get("errorMessage", "").startswith("Мест нет"):
@@ -380,7 +399,7 @@ async def get_seats(origin_station, destination_station, date, train):
         try:
             while data_res.get("result") is None or "lst" not in data_res["result"].keys():
                 moscow_spb_rid = data_res["result"]["rid"]
-                data_res = await get_info_with_rid(moscow_spb_rid, hashcode, url)
+                data_res = await get_info_with_rid(rid, device_guid, hashcode, url)
 
                 # Проверяем ошибку внутри цикла
                 if data_res.get("errorCode") == 1093 and data_res.get("errorMessage", "").startswith("Мест нет"):
@@ -407,8 +426,8 @@ async def get_seats(origin_station, destination_station, date, train):
     return available_seats
 
 
-# s = asyncio.run(get_train("2000000", "2010050", "18.04.2025"))
-# s = asyncio.run(get_train("2004000", "2064570", "26.05.2024"))
+# s = asyncio.run(get_train("2000000", "2010050", "18.06.2025"))
+# # s = asyncio.run(get_train("2004000", "2064570", "29.05.2024"))
 # print([key for key in s[0].keys() if len(s[0][key]) > 0])
 # for key in s[0].keys():
 #     if len(s[0][key]) > 0:
@@ -423,7 +442,7 @@ async def get_seats(origin_station, destination_station, date, train):
 # train_number = "740\u042f"
 # origin_station = "2000000"
 # destination_station = "2010050"
-# departure_date = "18.04.2025"
+# departure_date = "18.06.2025"
 # print(json.dumps(get_seats(origin_station, destination_station, departure_date, train_number)["coupe"], indent=4,
 #                  ensure_ascii=False))
 
